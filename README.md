@@ -1,6 +1,6 @@
 # Tapri Inventory Manager
 
-A small-store inventory dashboard for a Pune tapri owner/admin. It supports multiple shops, generated shop usernames/passwords, shop-wise inventory, daily sales, item profit, buying price, selling price, low stock, highest selling product, and closing stock updates.
+A small-store inventory dashboard for a Pune tapri owner/admin. It supports multiple shops, generated shop usernames/passwords, shop-wise inventory, daily sales, item profit, buying price, selling price, low stock, highest selling product, closing stock updates, and Supabase-backed persistence.
 
 ## Run Locally
 
@@ -27,9 +27,19 @@ npm run dev
 - Daily revenue, profit, units sold, stock value, and highest seller.
 - Low-stock analysis.
 - Closing stock update.
-- Browser local storage persistence.
+- Supabase Postgres persistence through RPC functions.
 
 Demo credentials:
 
 - Owner: `owner` / `owner123`
 - Shop: `fcroad.admin` / `Tapri@4217`
+
+## Supabase Setup
+
+Run the database setup with a local `DATABASE_URL` environment variable:
+
+```bash
+npm run setup:supabase
+```
+
+The setup creates tables, seed data, row-level security, and the RPC functions used by the browser app.

@@ -1,5 +1,6 @@
 'use client';
 
+import { createClient } from '@supabase/supabase-js';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 
 type Item = {
@@ -14,7 +15,7 @@ type Item = {
 
 type Sale = {
   id: string;
-  itemId: string;
+  itemId: string | null;
   itemName: string;
   qty: number;
   buyingPrice: number;
@@ -22,99 +23,48 @@ type Sale = {
   date: string;
 };
 
-type Shop = {
+type ShopAccount = {
   id: string;
   name: string;
   area: string;
   username: string;
-  password: string;
+  itemCount: number;
+};
+
+type ShopProfile = {
+  id: string;
+  name: string;
+  area: string;
+  username: string;
+};
+
+type ShopDashboardData = {
+  shop: ShopProfile;
   items: Item[];
-  sales: Sale[];
+  todaysSales: Sale[];
+};
+
+type OwnerSummary = {
+  shopCount: number;
+  revenue: number;
+  profit: number;
+  inventoryValue: number;
+  lowStockCount: number;
 };
 
 type Session = {
+  token: string;
   role: 'owner' | 'shop';
   shopId?: string;
 };
 
-const seedItems: Item[] = [
-  {
-    id: 'gold-flake-kings',
-    name: 'Gold Flake Kings',
-    category: 'Cigarettes',
-    buyingPrice: 17,
-    defaultSellingPrice: 20,
-    stock: 38,
-    reorderLevel: 12,
-  },
-  {
-    id: 'classic-milds',
-    name: 'Classic Milds',
-    category: 'Cigarettes',
-    buyingPrice: 18,
-    defaultSellingPrice: 22,
-    stock: 24,
-    reorderLevel: 10,
-  },
-  {
-    id: 'vimal-pouch',
-    name: 'Vimal Pouch',
-    category: 'Pan Masala',
-    buyingPrice: 4,
-    defaultSellingPrice: 5,
-    stock: 82,
-    reorderLevel: 25,
-  },
-  {
-    id: 'rajnigandha',
-    name: 'Rajnigandha',
-    category: 'Pan Masala',
-    buyingPrice: 18,
-    defaultSellingPrice: 20,
-    stock: 18,
-    reorderLevel: 8,
-  },
-  {
-    id: 'lighter',
-    name: 'Pocket Lighter',
-    category: 'Accessories',
-    buyingPrice: 8,
-    defaultSellingPrice: 12,
-    stock: 17,
-    reorderLevel: 6,
-  },
-];
+const supabaseUrl = 'https://yrpuetarxtuvnhenkigr.supabase.co';
+const supabaseAnonKey =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlycHVldGFyeHR1dm5oZW5raWdyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1NTI5NTQsImV4cCI6MjEwMzEyODk1NH0.Euw5G9m-R-oVnJmS14FX4TV_IoGDO59Zgjw58Kh8lhw';
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-const seedShops: Shop[] = [
-  {
-    id: 'fc-road-tapri',
-    name: 'FC Road Tapri',
-    area: 'Shivajinagar, Pune',
-    username: 'fcroad.admin',
-    password: 'Tapri@4217',
-    items: seedItems,
-    sales: [],
-  },
-  {
-    id: 'kothrud-corner',
-    name: 'Kothrud Corner Shop',
-    area: 'Kothrud, Pune',
-    username: 'kothrud.admin',
-    password: 'Tapri@8362',
-    items: seedItems.map((item) => ({
-      ...item,
-      id: `kothrud-${item.id}`,
-      stock: Math.max(8, item.stock - 9),
-    })),
-    sales: [],
-  },
-];
+const sessionKey = 'tapri-supabase-session-v1';
 
-const storageKey = 'tapri-inventory-v2';
-const ownerUsername = 'owner';
-const ownerPassword = 'owner123';
-
-const todayIso = () => new Date().toISOString().slice(0, 10);
 const money = (value: number) => `Rs ${Math.round(value).toLocaleString('en-IN')}`;
 const numeric = (value: FormDataEntryValue | null) => Number(value || 0);
 const cleanSlug = (value: string) =>
@@ -123,81 +73,92 @@ const cleanSlug = (value: string) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)/g, '');
 
-function cloneSeedItems(prefix: string) {
-  return seedItems.map((item) => ({ ...item, id: `${prefix}-${item.id}` }));
-}
-
 function generatePassword() {
   return `Tapri@${Math.floor(1000 + Math.random() * 9000)}`;
 }
 
+function toNumber(value: unknown) {
+  return Number(value ?? 0);
+}
+
+function mapItem(raw: Record<string, unknown>): Item {
+  return {
+    id: String(raw.id),
+    name: String(raw.name),
+    category: String(raw.category),
+    buyingPrice: toNumber(raw.buyingPrice),
+    defaultSellingPrice: toNumber(raw.defaultSellingPrice),
+    stock: toNumber(raw.stock),
+    reorderLevel: toNumber(raw.reorderLevel),
+  };
+}
+
+function mapSale(raw: Record<string, unknown>): Sale {
+  return {
+    id: String(raw.id),
+    itemId: raw.itemId ? String(raw.itemId) : null,
+    itemName: String(raw.itemName),
+    qty: toNumber(raw.qty),
+    buyingPrice: toNumber(raw.buyingPrice),
+    soldPrice: toNumber(raw.soldPrice),
+    date: String(raw.date),
+  };
+}
+
+function getRpcData<T>(data: T | null, error: { message?: string } | null) {
+  if (error) throw new Error(error.message || 'Supabase request failed');
+  if (data === null) throw new Error('Supabase returned no data');
+  return data;
+}
+
 export default function Home() {
   const [session, setSession] = useState<Session | null>(null);
-  const [shops, setShops] = useState<Shop[]>(seedShops);
-  const [selectedShopId, setSelectedShopId] = useState(seedShops[0].id);
-  const [selectedItemId, setSelectedItemId] = useState(seedShops[0].items[0].id);
+  const [shops, setShops] = useState<ShopAccount[]>([]);
+  const [ownerSummary, setOwnerSummary] = useState<OwnerSummary>({
+    shopCount: 0,
+    revenue: 0,
+    profit: 0,
+    inventoryValue: 0,
+    lowStockCount: 0,
+  });
+  const [dashboard, setDashboard] = useState<ShopDashboardData | null>(null);
+  const [selectedShopId, setSelectedShopId] = useState('');
+  const [selectedItemId, setSelectedItemId] = useState('');
   const [message, setMessage] = useState('Ready for today');
+  const [credentialNote, setCredentialNote] = useState('');
+  const [isBusy, setIsBusy] = useState(false);
 
   useEffect(() => {
-    const saved = window.localStorage.getItem(storageKey);
+    const saved = window.localStorage.getItem(sessionKey);
     if (!saved) return;
 
     try {
-      const parsed = JSON.parse(saved) as { shops?: Shop[] };
-      if (parsed.shops?.length) {
-        setShops(parsed.shops);
-        setSelectedShopId(parsed.shops[0].id);
-        setSelectedItemId(parsed.shops[0].items[0]?.id ?? '');
-      }
+      const parsed = JSON.parse(saved) as Session;
+      setSession(parsed);
+      void loadAfterLogin(parsed);
     } catch {
-      setMessage('Saved data could not be loaded');
+      window.localStorage.removeItem(sessionKey);
     }
   }, []);
 
-  useEffect(() => {
-    window.localStorage.setItem(storageKey, JSON.stringify({ shops }));
-  }, [shops]);
-
-  const visibleShopId = session?.role === 'shop' ? session.shopId ?? selectedShopId : selectedShopId;
-  const activeShop = shops.find((shop) => shop.id === visibleShopId) ?? shops[0];
-  const selectedItem = activeShop.items.find((item) => item.id === selectedItemId) ?? activeShop.items[0];
+  const selectedItem = dashboard?.items.find((item) => item.id === selectedItemId) ?? dashboard?.items[0];
 
   useEffect(() => {
-    if (!activeShop.items.some((item) => item.id === selectedItemId)) {
-      setSelectedItemId(activeShop.items[0]?.id ?? '');
+    if (!dashboard?.items.some((item) => item.id === selectedItemId)) {
+      setSelectedItemId(dashboard?.items[0]?.id ?? '');
     }
-  }, [activeShop, selectedItemId]);
-
-  const ownerMetrics = useMemo(() => {
-    const allSales = shops.flatMap((shop) => shop.sales);
-    const todaysSales = allSales.filter((sale) => sale.date === todayIso());
-    const revenue = todaysSales.reduce((sum, sale) => sum + sale.soldPrice * sale.qty, 0);
-    const profit = todaysSales.reduce(
-      (sum, sale) => sum + (sale.soldPrice - sale.buyingPrice) * sale.qty,
-      0,
-    );
-    const inventoryValue = shops.reduce(
-      (sum, shop) => sum + shop.items.reduce((itemSum, item) => itemSum + item.stock * item.buyingPrice, 0),
-      0,
-    );
-    const lowStockCount = shops.reduce(
-      (sum, shop) => sum + shop.items.filter((item) => item.stock <= item.reorderLevel).length,
-      0,
-    );
-
-    return { revenue, profit, inventoryValue, lowStockCount };
-  }, [shops]);
+  }, [dashboard, selectedItemId]);
 
   const metrics = useMemo(() => {
-    const todaysSales = activeShop.sales.filter((sale) => sale.date === todayIso());
+    const items = dashboard?.items ?? [];
+    const todaysSales = dashboard?.todaysSales ?? [];
     const revenue = todaysSales.reduce((sum, sale) => sum + sale.soldPrice * sale.qty, 0);
     const profit = todaysSales.reduce(
       (sum, sale) => sum + (sale.soldPrice - sale.buyingPrice) * sale.qty,
       0,
     );
     const units = todaysSales.reduce((sum, sale) => sum + sale.qty, 0);
-    const inventoryValue = activeShop.items.reduce((sum, item) => sum + item.stock * item.buyingPrice, 0);
-    const lowStock = activeShop.items.filter((item) => item.stock <= item.reorderLevel);
+    const lowStock = items.filter((item) => item.stock <= item.reorderLevel);
 
     const byProduct = todaysSales.reduce<Record<string, number>>((acc, sale) => {
       acc[sale.itemName] = (acc[sale.itemName] ?? 0) + sale.qty;
@@ -209,137 +170,260 @@ export default function Home() {
       revenue,
       profit,
       units,
-      inventoryValue,
       lowStock,
       topSeller: topSeller ? `${topSeller[0]} (${topSeller[1]} pcs)` : 'No sales yet',
       todaysSales,
     };
-  }, [activeShop]);
+  }, [dashboard]);
 
-  function handleLogin(event: FormEvent<HTMLFormElement>) {
+  async function loadAfterLogin(nextSession: Session) {
+    try {
+      setIsBusy(true);
+      if (nextSession.role === 'owner') {
+        await loadOwner(nextSession.token, nextSession.shopId);
+      } else if (nextSession.shopId) {
+        await loadShop(nextSession.token, nextSession.shopId);
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not load Supabase data');
+      setSession(null);
+      window.localStorage.removeItem(sessionKey);
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function loadOwner(token: string, preferredShopId?: string) {
+    const [{ data: summaryData, error: summaryError }, { data: shopsData, error: shopsError }] =
+      await Promise.all([
+        supabase.rpc('owner_summary', { p_token: token }),
+        supabase.rpc('list_shops', { p_token: token }),
+      ]);
+
+    const summary = getRpcData<Record<string, unknown>>(summaryData, summaryError);
+    const shopRows = getRpcData<Record<string, unknown>[]>(shopsData, shopsError).map((shop) => ({
+      id: String(shop.id),
+      name: String(shop.name),
+      area: String(shop.area),
+      username: String(shop.username),
+      itemCount: toNumber(shop.itemCount),
+    }));
+
+    setOwnerSummary({
+      shopCount: toNumber(summary.shopCount),
+      revenue: toNumber(summary.revenue),
+      profit: toNumber(summary.profit),
+      inventoryValue: toNumber(summary.inventoryValue),
+      lowStockCount: toNumber(summary.lowStockCount),
+    });
+    setShops(shopRows);
+
+    const nextShopId = preferredShopId && shopRows.some((shop) => shop.id === preferredShopId)
+      ? preferredShopId
+      : shopRows[0]?.id ?? '';
+    setSelectedShopId(nextShopId);
+    if (nextShopId) await loadShop(token, nextShopId);
+  }
+
+  async function loadShop(token: string, shopId: string) {
+    const { data, error } = await supabase.rpc('get_shop_dashboard', {
+      p_token: token,
+      p_shop_id: shopId,
+    });
+    const raw = getRpcData<Record<string, unknown>>(data, error);
+    const shop = raw.shop as Record<string, unknown>;
+    const items = (raw.items as Record<string, unknown>[]).map(mapItem);
+    const todaysSales = (raw.todaysSales as Record<string, unknown>[]).map(mapSale);
+
+    setDashboard({
+      shop: {
+        id: String(shop.id),
+        name: String(shop.name),
+        area: String(shop.area),
+        username: String(shop.username),
+      },
+      items,
+      todaysSales,
+    });
+    setSelectedShopId(String(shop.id));
+    setSelectedItemId(items[0]?.id ?? '');
+  }
+
+  async function refreshCurrentShop() {
+    if (!session || !selectedShopId) return;
+    await loadShop(session.token, selectedShopId);
+    if (session.role === 'owner') await loadOwner(session.token, selectedShopId);
+  }
+
+  async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const username = String(form.get('username') || '').trim();
     const password = String(form.get('password') || '').trim();
 
-    if (username === ownerUsername && password === ownerPassword) {
-      setSession({ role: 'owner' });
-      setMessage('Logged in as owner admin');
-      return;
+    try {
+      setIsBusy(true);
+      const { data, error } = await supabase.rpc('login_user', {
+        p_username: username,
+        p_password: password,
+      });
+      const login = getRpcData<Record<string, unknown>>(data, error);
+      const nextSession: Session = {
+        token: String(login.token),
+        role: login.role === 'owner' ? 'owner' : 'shop',
+        shopId: login.shopId ? String(login.shopId) : undefined,
+      };
+      setSession(nextSession);
+      window.localStorage.setItem(sessionKey, JSON.stringify(nextSession));
+      setMessage(nextSession.role === 'owner' ? 'Logged in as owner admin' : `Logged in to ${login.shopName}`);
+      await loadAfterLogin(nextSession);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Invalid username or password');
+    } finally {
+      setIsBusy(false);
     }
-
-    const shop = shops.find((entry) => entry.username === username && entry.password === password);
-    if (shop) {
-      setSession({ role: 'shop', shopId: shop.id });
-      setSelectedShopId(shop.id);
-      setSelectedItemId(shop.items[0]?.id ?? '');
-      setMessage(`Logged in to ${shop.name}`);
-      return;
-    }
-
-    setMessage('Invalid username or password');
   }
 
-  function handleAddShop(event: FormEvent<HTMLFormElement>) {
+  async function handleLogout() {
+    if (session?.token) {
+      await supabase.rpc('logout_user', { p_token: session.token });
+    }
+    setSession(null);
+    setDashboard(null);
+    setCredentialNote('');
+    window.localStorage.removeItem(sessionKey);
+  }
+
+  async function handleAddShop(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!session) return;
+
     const form = new FormData(event.currentTarget);
     const name = String(form.get('shopName') || '').trim();
     if (!name) return;
 
     const slug = cleanSlug(name) || `shop-${Date.now()}`;
-    const username = `${slug}.admin`;
+    const username = `${slug}-${Date.now().toString().slice(-4)}.admin`;
     const password = generatePassword();
-    const shop: Shop = {
-      id: `${slug}-${Date.now()}`,
-      name,
-      area: String(form.get('area') || 'Pune').trim() || 'Pune',
-      username,
-      password,
-      items: cloneSeedItems(slug),
-      sales: [],
-    };
 
-    setShops((current) => [...current, shop]);
-    setSelectedShopId(shop.id);
-    setSelectedItemId(shop.items[0]?.id ?? '');
-    setMessage(`Created ${name} login: ${username} / ${password}`);
-    event.currentTarget.reset();
+    try {
+      setIsBusy(true);
+      const { data, error } = await supabase.rpc('create_shop', {
+        p_token: session.token,
+        p_name: name,
+        p_area: String(form.get('area') || 'Pune').trim() || 'Pune',
+        p_username: username,
+        p_password: password,
+      });
+      const shop = getRpcData<Record<string, unknown>>(data, error);
+      const shopId = String(shop.id);
+      setCredentialNote(`New login: ${shop.username} / ${shop.password}`);
+      setMessage(`${shop.name} created`);
+      event.currentTarget.reset();
+      await loadOwner(session.token, shopId);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not create shop');
+    } finally {
+      setIsBusy(false);
+    }
   }
 
-  function updateActiveShop(updater: (shop: Shop) => Shop) {
-    setShops((current) => current.map((shop) => (shop.id === activeShop.id ? updater(shop) : shop)));
+  async function resetShopPassword(shopId: string) {
+    if (!session) return;
+
+    const password = generatePassword();
+    try {
+      setIsBusy(true);
+      const { data, error } = await supabase.rpc('reset_shop_password', {
+        p_token: session.token,
+        p_shop_id: shopId,
+        p_password: password,
+      });
+      const shop = getRpcData<Record<string, unknown>>(data, error);
+      setCredentialNote(`Reset login: ${shop.username} / ${shop.password}`);
+      setMessage(`${shop.name} password reset`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not reset password');
+    } finally {
+      setIsBusy(false);
+    }
   }
 
-  function handleAddItem(event: FormEvent<HTMLFormElement>) {
+  async function handleAddItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!session || !dashboard) return;
+
     const form = new FormData(event.currentTarget);
     const name = String(form.get('name') || '').trim();
     if (!name) return;
 
-    const newItem: Item = {
-      id: `${activeShop.id}-${cleanSlug(name)}-${Date.now()}`,
-      name,
-      category: String(form.get('category') || 'General').trim() || 'General',
-      buyingPrice: numeric(form.get('buyingPrice')),
-      defaultSellingPrice: numeric(form.get('sellingPrice')),
-      stock: numeric(form.get('stock')),
-      reorderLevel: numeric(form.get('reorderLevel')),
-    };
-
-    updateActiveShop((shop) => ({ ...shop, items: [...shop.items, newItem] }));
-    setSelectedItemId(newItem.id);
-    setMessage(`${name} added to ${activeShop.name}`);
-    event.currentTarget.reset();
+    try {
+      setIsBusy(true);
+      const { data, error } = await supabase.rpc('add_item', {
+        p_token: session.token,
+        p_shop_id: dashboard.shop.id,
+        p_name: name,
+        p_category: String(form.get('category') || 'General').trim() || 'General',
+        p_buying_price: numeric(form.get('buyingPrice')),
+        p_selling_price: numeric(form.get('sellingPrice')),
+        p_stock: numeric(form.get('stock')),
+        p_reorder_level: numeric(form.get('reorderLevel')),
+      });
+      const item = mapItem(getRpcData<Record<string, unknown>>(data, error));
+      setSelectedItemId(item.id);
+      setMessage(`${item.name} added to ${dashboard.shop.name}`);
+      event.currentTarget.reset();
+      await refreshCurrentShop();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not add item');
+    } finally {
+      setIsBusy(false);
+    }
   }
 
-  function handleRecordSale(event: FormEvent<HTMLFormElement>) {
+  async function handleRecordSale(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selectedItem) return;
+    if (!session || !dashboard || !selectedItem) return;
 
     const form = new FormData(event.currentTarget);
-    const qty = Math.max(1, numeric(form.get('qty')));
-    const soldPrice = Math.max(0, numeric(form.get('soldPrice')));
-    const sellableQty = Math.min(qty, selectedItem.stock);
-
-    if (sellableQty <= 0) {
-      setMessage(`${selectedItem.name} is out of stock`);
-      return;
+    try {
+      setIsBusy(true);
+      const { data, error } = await supabase.rpc('record_sale', {
+        p_token: session.token,
+        p_shop_id: dashboard.shop.id,
+        p_item_id: selectedItem.id,
+        p_qty: Math.max(1, numeric(form.get('qty'))),
+        p_sold_price: Math.max(0, numeric(form.get('soldPrice'))),
+      });
+      const sale = mapSale(getRpcData<Record<string, unknown>>(data, error));
+      setMessage(`Sold ${sale.qty} ${sale.itemName} at ${dashboard.shop.name}`);
+      event.currentTarget.reset();
+      await refreshCurrentShop();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not record sale');
+    } finally {
+      setIsBusy(false);
     }
-
-    const sale: Sale = {
-      id: `${selectedItem.id}-${Date.now()}`,
-      itemId: selectedItem.id,
-      itemName: selectedItem.name,
-      qty: sellableQty,
-      buyingPrice: selectedItem.buyingPrice,
-      soldPrice,
-      date: todayIso(),
-    };
-
-    updateActiveShop((shop) => ({
-      ...shop,
-      sales: [sale, ...shop.sales],
-      items: shop.items.map((item) =>
-        item.id === selectedItem.id ? { ...item, stock: item.stock - sellableQty } : item,
-      ),
-    }));
-    setMessage(`Sold ${sellableQty} ${selectedItem.name} at ${activeShop.name}`);
-    event.currentTarget.reset();
   }
 
-  function updateClosingCount(itemId: string, stock: number) {
-    updateActiveShop((shop) => ({
-      ...shop,
-      items: shop.items.map((item) => (item.id === itemId ? { ...item, stock: Math.max(0, stock) } : item)),
-    }));
-    setMessage(`Closing stock updated for ${activeShop.name}`);
-  }
+  async function updateClosingCount(itemId: string, stock: number) {
+    if (!session) return;
 
-  function resetShopPassword(shopId: string) {
-    const password = generatePassword();
-    setShops((current) => current.map((shop) => (shop.id === shopId ? { ...shop, password } : shop)));
-    const shop = shops.find((entry) => entry.id === shopId);
-    setMessage(`${shop?.name ?? 'Shop'} new password: ${password}`);
+    try {
+      setIsBusy(true);
+      const { error } = await supabase.rpc('update_stock', {
+        p_token: session.token,
+        p_item_id: itemId,
+        p_stock: stock,
+      });
+      if (error) throw new Error(error.message);
+      setMessage('Closing stock updated');
+      await refreshCurrentShop();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not update stock');
+    } finally {
+      setIsBusy(false);
+    }
   }
 
   if (!session) {
@@ -349,14 +433,14 @@ export default function Home() {
           <div>
             <p className="text-sm font-semibold uppercase text-[#66735c]">Tapri stock desk</p>
             <h1 className="mt-3 max-w-2xl text-4xl font-semibold leading-tight sm:text-6xl">
-              Multi-shop inventory and profit tracking for Pune tapris
+              Multi-shop inventory backed by Supabase
             </h1>
             <p className="mt-5 max-w-xl text-base leading-7 text-[#62655f]">
               Owner admin can create shops, generate usernames and passwords, then track each
               shop's items, stock, daily sales, profit, and fast moving products separately.
             </p>
             <div className="mt-8 grid max-w-xl grid-cols-3 gap-3">
-              {['Shop logins', 'Stock count', 'Profit view'].map((label) => (
+              {['Shop logins', 'Cloud data', 'Profit view'].map((label) => (
                 <div key={label} className="border border-[#d8d3c5] bg-white p-4">
                   <p className="text-sm font-semibold">{label}</p>
                 </div>
@@ -385,8 +469,11 @@ export default function Home() {
               className="mt-2 w-full border border-[#cfc8b8] px-3 py-3 outline-none focus:border-[#2d6a4f]"
               placeholder="owner123"
             />
-            <button className="mt-6 w-full bg-[#2d6a4f] px-4 py-3 font-semibold text-white">
-              Open dashboard
+            <button
+              disabled={isBusy}
+              className="mt-6 w-full bg-[#2d6a4f] px-4 py-3 font-semibold text-white disabled:opacity-60"
+            >
+              {isBusy ? 'Opening...' : 'Open dashboard'}
             </button>
             <p className="mt-4 text-sm text-[#62655f]">
               Owner demo: owner / owner123. Shop demo: fcroad.admin / Tapri@4217.
@@ -405,12 +492,14 @@ export default function Home() {
           <div>
             <p className="text-xs font-semibold uppercase text-[#66735c]">Pune Tapri Inventory</p>
             <h1 className="text-2xl font-semibold">
-              {session.role === 'owner' ? 'Owner Admin Dashboard' : `${activeShop.name} Dashboard`}
+              {session.role === 'owner' ? 'Owner Admin Dashboard' : `${dashboard?.shop.name ?? 'Shop'} Dashboard`}
             </h1>
           </div>
           <div className="flex items-center gap-3 text-sm">
-            <span className="border border-[#d8d3c5] bg-[#f8f7f2] px-3 py-2">{message}</span>
-            <button onClick={() => setSession(null)} className="border border-[#20221f] px-3 py-2">
+            <span className="border border-[#d8d3c5] bg-[#f8f7f2] px-3 py-2">
+              {isBusy ? 'Syncing...' : message}
+            </span>
+            <button onClick={handleLogout} className="border border-[#20221f] px-3 py-2">
               Logout
             </button>
           </div>
@@ -421,18 +510,18 @@ export default function Home() {
         {session.role === 'owner' ? (
           <>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-              <Metric label="Total shops" value={`${shops.length}`} />
-              <Metric label="Today sales" value={money(ownerMetrics.revenue)} />
-              <Metric label="Today profit" value={money(ownerMetrics.profit)} />
-              <Metric label="Stock value" value={money(ownerMetrics.inventoryValue)} />
-              <Metric label="Low stock items" value={`${ownerMetrics.lowStockCount}`} />
+              <Metric label="Total shops" value={`${ownerSummary.shopCount}`} />
+              <Metric label="Today sales" value={money(ownerSummary.revenue)} />
+              <Metric label="Today profit" value={money(ownerSummary.profit)} />
+              <Metric label="Stock value" value={money(ownerSummary.inventoryValue)} />
+              <Metric label="Low stock items" value={`${ownerSummary.lowStockCount}`} />
             </div>
 
             <div className="mt-6 grid gap-5 xl:grid-cols-[1fr_0.75fr]">
               <section className="border border-[#d8d3c5] bg-white">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e2ddcf] px-4 py-3">
                   <h2 className="text-lg font-semibold">Shop accounts</h2>
-                  <span className="text-sm text-[#62655f]">Generated credentials for each shop</span>
+                  <span className="text-sm text-[#62655f]">Credentials are revealed only when generated or reset</span>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[760px] text-left text-sm">
@@ -441,7 +530,6 @@ export default function Home() {
                         <th className="px-4 py-3">Shop</th>
                         <th className="px-4 py-3">Area</th>
                         <th className="px-4 py-3">Username</th>
-                        <th className="px-4 py-3">Password</th>
                         <th className="px-4 py-3">Items</th>
                         <th className="px-4 py-3">Action</th>
                       </tr>
@@ -452,22 +540,17 @@ export default function Home() {
                           <td className="px-4 py-3 font-medium">{shop.name}</td>
                           <td className="px-4 py-3">{shop.area}</td>
                           <td className="px-4 py-3 font-mono text-xs">{shop.username}</td>
-                          <td className="px-4 py-3 font-mono text-xs">{shop.password}</td>
-                          <td className="px-4 py-3">{shop.items.length}</td>
+                          <td className="px-4 py-3">{shop.itemCount}</td>
                           <td className="px-4 py-3">
                             <div className="flex gap-2">
                               <button
-                                onClick={() => {
-                                  setSelectedShopId(shop.id);
-                                  setSelectedItemId(shop.items[0]?.id ?? '');
-                                  setMessage(`Viewing ${shop.name}`);
-                                }}
+                                onClick={() => void loadOwner(session.token, shop.id)}
                                 className="border border-[#2d6a4f] px-3 py-2 text-[#2d6a4f]"
                               >
                                 View
                               </button>
                               <button
-                                onClick={() => resetShopPassword(shop.id)}
+                                onClick={() => void resetShopPassword(shop.id)}
                                 className="border border-[#8a3f20] px-3 py-2 text-[#8a3f20]"
                               >
                                 Reset
@@ -487,13 +570,22 @@ export default function Home() {
                   <Field label="Shop name" name="shopName" />
                   <Field label="Area" name="area" defaultValue="Pune" />
                 </div>
-                <button className="mt-4 w-full bg-[#2d6a4f] px-4 py-3 font-semibold text-white">
+                <button
+                  disabled={isBusy}
+                  className="mt-4 w-full bg-[#2d6a4f] px-4 py-3 font-semibold text-white disabled:opacity-60"
+                >
                   Generate shop login
                 </button>
-                <p className="mt-3 text-sm text-[#62655f]">
-                  New shops start with the standard tapri item list. You can edit their stock after
-                  selecting the shop.
-                </p>
+                {credentialNote ? (
+                  <p className="mt-3 border border-[#d8d3c5] bg-[#f8f7f2] p-3 font-mono text-xs">
+                    {credentialNote}
+                  </p>
+                ) : (
+                  <p className="mt-3 text-sm text-[#62655f]">
+                    New shops start with the standard tapri item list. Copy credentials when they
+                    appear here.
+                  </p>
+                )}
               </form>
             </div>
 
@@ -502,16 +594,12 @@ export default function Home() {
                 <div>
                   <h2 className="text-lg font-semibold">Manage selected shop</h2>
                   <p className="text-sm text-[#62655f]">
-                    {activeShop.name} - {activeShop.area}
+                    {dashboard?.shop.name ?? 'No shop selected'} - {dashboard?.shop.area ?? ''}
                   </p>
                 </div>
                 <select
                   value={selectedShopId}
-                  onChange={(event) => {
-                    const shop = shops.find((entry) => entry.id === event.target.value);
-                    setSelectedShopId(event.target.value);
-                    setSelectedItemId(shop?.items[0]?.id ?? '');
-                  }}
+                  onChange={(event) => void loadOwner(session.token, event.target.value)}
                   className="border border-[#cfc8b8] px-3 py-3"
                 >
                   {shops.map((shop) => (
@@ -525,23 +613,27 @@ export default function Home() {
           </>
         ) : null}
 
-        <ShopDashboard
-          activeShop={activeShop}
-          selectedItemId={selectedItemId}
-          selectedItem={selectedItem}
-          metrics={metrics}
-          setSelectedItemId={setSelectedItemId}
-          handleRecordSale={handleRecordSale}
-          handleAddItem={handleAddItem}
-          updateClosingCount={updateClosingCount}
-        />
+        {dashboard ? (
+          <ShopDashboard
+            dashboard={dashboard}
+            selectedItemId={selectedItemId}
+            selectedItem={selectedItem}
+            metrics={metrics}
+            setSelectedItemId={setSelectedItemId}
+            handleRecordSale={handleRecordSale}
+            handleAddItem={handleAddItem}
+            updateClosingCount={updateClosingCount}
+          />
+        ) : (
+          <section className="mt-6 border border-[#d8d3c5] bg-white p-6">Loading shop data...</section>
+        )}
       </section>
     </main>
   );
 }
 
 function ShopDashboard({
-  activeShop,
+  dashboard,
   selectedItemId,
   selectedItem,
   metrics,
@@ -550,14 +642,13 @@ function ShopDashboard({
   handleAddItem,
   updateClosingCount,
 }: {
-  activeShop: Shop;
+  dashboard: ShopDashboardData;
   selectedItemId: string;
   selectedItem?: Item;
   metrics: {
     revenue: number;
     profit: number;
     units: number;
-    inventoryValue: number;
     lowStock: Item[];
     topSeller: string;
     todaysSales: Sale[];
@@ -570,7 +661,7 @@ function ShopDashboard({
   return (
     <>
       <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <Metric label="Selected shop" value={activeShop.name} />
+        <Metric label="Selected shop" value={dashboard.shop.name} />
         <Metric label="Today sales" value={money(metrics.revenue)} />
         <Metric label="Today profit" value={money(metrics.profit)} />
         <Metric label="Units sold" value={`${metrics.units} pcs`} />
@@ -581,7 +672,7 @@ function ShopDashboard({
         <section className="border border-[#d8d3c5] bg-white">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e2ddcf] px-4 py-3">
             <h2 className="text-lg font-semibold">Available shop items</h2>
-            <span className="text-sm text-[#62655f]">{activeShop.items.length} active items</span>
+            <span className="text-sm text-[#62655f]">{dashboard.items.length} active items</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[780px] text-left text-sm">
@@ -597,7 +688,7 @@ function ShopDashboard({
                 </tr>
               </thead>
               <tbody>
-                {activeShop.items.map((item) => (
+                {dashboard.items.map((item) => (
                   <tr key={item.id} className="border-t border-[#eee9dc]">
                     <td className="px-4 py-3 font-medium">{item.name}</td>
                     <td className="px-4 py-3">{item.category}</td>
@@ -609,8 +700,8 @@ function ShopDashboard({
                         aria-label={`Closing count for ${item.name}`}
                         type="number"
                         min="0"
-                        value={item.stock}
-                        onChange={(event) => updateClosingCount(item.id, Number(event.target.value))}
+                        defaultValue={item.stock}
+                        onBlur={(event) => void updateClosingCount(item.id, Number(event.target.value))}
                         className="w-24 border border-[#cfc8b8] px-2 py-2"
                       />
                     </td>
@@ -644,7 +735,7 @@ function ShopDashboard({
               onChange={(event) => setSelectedItemId(event.target.value)}
               className="mt-2 w-full border border-[#cfc8b8] px-3 py-3"
             >
-              {activeShop.items.map((item) => (
+              {dashboard.items.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.name} - {item.stock} pcs left
                 </option>

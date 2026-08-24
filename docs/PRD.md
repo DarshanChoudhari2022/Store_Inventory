@@ -123,6 +123,7 @@ Included in current prototype:
 - Generated shop username and password.
 - Shop password reset.
 - Shop-scoped login and dashboard.
+- Supabase-backed cloud data storage.
 - Inventory list seeded with common tapri items.
 - Add custom item form.
 - Record sale form with actual sold price.
@@ -130,12 +131,12 @@ Included in current prototype:
 - Closing count updates.
 - Today's revenue, profit, units sold, stock value, top seller.
 - Low-stock analysis.
-- Browser local storage persistence.
+- Database persistence through Supabase.
 
 Production next step:
 
-- Real backend database.
-- Secure authentication.
+- First-login password reset.
+- Supabase Auth or OTP-based authentication.
 - Password hashing and role permissions.
 - Daily reports by date range.
 - Data export and backup.
