@@ -58,6 +58,141 @@ type Session = {
   shopId?: string;
 };
 
+type Lang = 'en' | 'mr';
+
+const dictionary = {
+  en: {
+    appName: 'Store Inventory Management',
+    eyebrow: 'Store stock desk',
+    heroTitle: 'Multi-store inventory backed by Supabase',
+    heroCopy:
+      "Owner admin can create shops, generate usernames and passwords, then track each shop's items, stock, daily sales, profit, and fast moving products separately.",
+    shopLogins: 'Shop logins',
+    cloudData: 'Cloud data',
+    profitView: 'Profit view',
+    adminLogin: 'Admin login',
+    username: 'Username',
+    password: 'Password',
+    openDashboard: 'Open dashboard',
+    opening: 'Opening...',
+    demoCreds: 'Owner demo: owner / owner123. Shop demo: fcroad.admin / Store@4217.',
+    ownerDashboard: 'Owner Admin Dashboard',
+    shopAccounts: 'Shop accounts',
+    credentialsHint: 'Credentials are revealed only when generated or reset',
+    addNewShop: 'Add new shop',
+    shopName: 'Shop name',
+    area: 'Area',
+    generateLogin: 'Generate shop login',
+    newShopHint: 'New stores start with the standard inventory item list. Copy credentials when they appear here.',
+    manageShop: 'Manage selected shop',
+    selectedShop: 'Selected shop',
+    totalShops: 'Total shops',
+    todaySales: 'Today sales',
+    todayProfit: 'Today profit',
+    stockValue: 'Stock value',
+    lowStockItems: 'Low stock items',
+    unitsSold: 'Units sold',
+    highestSeller: 'Highest seller',
+    availableItems: 'Available shop items',
+    activeItems: 'active items',
+    item: 'Item',
+    category: 'Category',
+    buy: 'Buy',
+    sell: 'Sell',
+    stock: 'Stock',
+    closingCount: 'Closing count',
+    status: 'Status',
+    restock: 'Restock',
+    ok: 'OK',
+    recordSold: 'Record sold product',
+    product: 'Product',
+    qtySold: 'Qty sold',
+    soldPrice: 'Sold price per pc',
+    saveSale: 'Save sale',
+    addItem: 'Add custom shop item',
+    itemName: 'Item name',
+    buyingPrice: 'Buying price',
+    sellingPrice: 'Selling price',
+    totalQty: 'Total qty',
+    restockAlert: 'Restock alert',
+    addItemAction: 'Add item',
+    lowStockAnalysis: 'Low stock analysis',
+    noLowStock: 'No low stock items today.',
+    todaySalesLog: 'Today sales log',
+    noSales: 'Sales added today will appear here.',
+    loading: 'Loading shop data...',
+    syncing: 'Syncing...',
+    logout: 'Logout',
+    view: 'View',
+    reset: 'Reset',
+  },
+  mr: {
+    appName: 'स्टोअर इन्व्हेंटरी व्यवस्थापन',
+    eyebrow: 'स्टोअर स्टॉक डेस्क',
+    heroTitle: 'Supabase सह मल्टी-स्टोअर इन्व्हेंटरी',
+    heroCopy:
+      'मालक अॅडमिन दुकाने तयार करू शकतो, युजरनेम आणि पासवर्ड जनरेट करू शकतो, आणि प्रत्येक दुकानाचा स्टॉक, विक्री, नफा आणि जलद विकली जाणारी उत्पादने वेगळी पाहू शकतो.',
+    shopLogins: 'दुकान लॉगिन',
+    cloudData: 'क्लाउड डेटा',
+    profitView: 'नफा दृश्य',
+    adminLogin: 'अॅडमिन लॉगिन',
+    username: 'युजरनेम',
+    password: 'पासवर्ड',
+    openDashboard: 'डॅशबोर्ड उघडा',
+    opening: 'उघडत आहे...',
+    demoCreds: 'मालक डेमो: owner / owner123. दुकान डेमो: fcroad.admin / Store@4217.',
+    ownerDashboard: 'मालक अॅडमिन डॅशबोर्ड',
+    shopAccounts: 'दुकान खाती',
+    credentialsHint: 'क्रेडेन्शियल्स फक्त तयार किंवा रीसेट केल्यावर दिसतील',
+    addNewShop: 'नवीन दुकान जोडा',
+    shopName: 'दुकानाचे नाव',
+    area: 'एरिया',
+    generateLogin: 'दुकान लॉगिन जनरेट करा',
+    newShopHint: 'नवीन दुकानांना स्टँडर्ड इन्व्हेंटरी यादी मिळेल. क्रेडेन्शियल्स दिसल्यावर कॉपी करा.',
+    manageShop: 'निवडलेले दुकान व्यवस्थापित करा',
+    selectedShop: 'निवडलेले दुकान',
+    totalShops: 'एकूण दुकाने',
+    todaySales: 'आजची विक्री',
+    todayProfit: 'आजचा नफा',
+    stockValue: 'स्टॉक मूल्य',
+    lowStockItems: 'कमी स्टॉक आयटम',
+    unitsSold: 'विकलेले युनिट्स',
+    highestSeller: 'सर्वाधिक विक्री',
+    availableItems: 'उपलब्ध दुकान आयटम',
+    activeItems: 'सक्रिय आयटम',
+    item: 'आयटम',
+    category: 'कॅटेगरी',
+    buy: 'खरेदी',
+    sell: 'विक्री',
+    stock: 'स्टॉक',
+    closingCount: 'क्लोजिंग काउंट',
+    status: 'स्थिती',
+    restock: 'रीस्टॉक',
+    ok: 'ठीक',
+    recordSold: 'विकलेला प्रॉडक्ट नोंदवा',
+    product: 'प्रॉडक्ट',
+    qtySold: 'विकलेली संख्या',
+    soldPrice: 'प्रति पीस विक्री किंमत',
+    saveSale: 'विक्री सेव्ह करा',
+    addItem: 'कस्टम दुकान आयटम जोडा',
+    itemName: 'आयटम नाव',
+    buyingPrice: 'खरेदी किंमत',
+    sellingPrice: 'विक्री किंमत',
+    totalQty: 'एकूण संख्या',
+    restockAlert: 'रीस्टॉक अलर्ट',
+    addItemAction: 'आयटम जोडा',
+    lowStockAnalysis: 'कमी स्टॉक विश्लेषण',
+    noLowStock: 'आज कोणताही कमी स्टॉक आयटम नाही.',
+    todaySalesLog: 'आजची विक्री नोंद',
+    noSales: 'आज जोडलेली विक्री येथे दिसेल.',
+    loading: 'दुकान डेटा लोड होत आहे...',
+    syncing: 'सिंक होत आहे...',
+    logout: 'लॉगआउट',
+    view: 'पहा',
+    reset: 'रीसेट',
+  },
+} satisfies Record<Lang, Record<string, string>>;
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
@@ -137,6 +272,8 @@ export default function Home() {
   const [message, setMessage] = useState('Ready for today');
   const [credentialNote, setCredentialNote] = useState('');
   const [isBusy, setIsBusy] = useState(false);
+  const [lang, setLang] = useState<Lang>('en');
+  const copy = dictionary[lang];
 
   useEffect(() => {
     const saved = window.localStorage.getItem(sessionKey);
@@ -479,30 +616,32 @@ export default function Home() {
 
   if (!session) {
     return (
-      <main className="min-h-screen bg-[#f8f7f2] text-[#20221f]">
-        <section className="mx-auto grid min-h-screen max-w-6xl items-center gap-10 px-5 py-8 lg:grid-cols-[1.1fr_0.9fr]">
-          <div>
-            <p className="text-sm font-semibold uppercase text-[#66735c]">Store stock desk</p>
+      <main className="auth-shell min-h-screen bg-[#f8f7f2] text-[#20221f]">
+        <section className="auth-grid mx-auto grid min-h-screen max-w-6xl items-center gap-10 px-5 py-8 lg:grid-cols-[1.1fr_0.9fr]">
+          <div className="auth-copy">
+            <div className="topline">
+              <p className="text-sm font-semibold uppercase text-[#66735c]">{copy.eyebrow}</p>
+              <LanguageToggle lang={lang} setLang={setLang} />
+            </div>
             <h1 className="mt-3 max-w-2xl text-4xl font-semibold leading-tight sm:text-6xl">
-              Multi-shop inventory backed by Supabase
+              {copy.heroTitle}
             </h1>
             <p className="mt-5 max-w-xl text-base leading-7 text-[#62655f]">
-              Owner admin can create shops, generate usernames and passwords, then track each
-              shop's items, stock, daily sales, profit, and fast moving products separately.
+              {copy.heroCopy}
             </p>
             <div className="mt-8 grid max-w-xl grid-cols-3 gap-3">
-              {['Shop logins', 'Cloud data', 'Profit view'].map((label) => (
-                <div key={label} className="border border-[#d8d3c5] bg-white p-4">
+              {[copy.shopLogins, copy.cloudData, copy.profitView].map((label) => (
+                <div key={label} className="feature-tile border border-[#d8d3c5] bg-white p-4">
                   <p className="text-sm font-semibold">{label}</p>
                 </div>
               ))}
             </div>
           </div>
 
-          <form onSubmit={handleLogin} className="border border-[#d8d3c5] bg-white p-6 shadow-sm">
-            <h2 className="text-2xl font-semibold">Admin login</h2>
+          <form onSubmit={handleLogin} className="auth-card border border-[#d8d3c5] bg-white p-6 shadow-sm">
+            <h2 className="text-2xl font-semibold">{copy.adminLogin}</h2>
             <label className="mt-6 block text-sm font-medium" htmlFor="username">
-              Username
+              {copy.username}
             </label>
             <input
               id="username"
@@ -511,7 +650,7 @@ export default function Home() {
               placeholder="owner"
             />
             <label className="mt-4 block text-sm font-medium" htmlFor="password">
-              Password
+              {copy.password}
             </label>
             <input
               id="password"
@@ -524,10 +663,10 @@ export default function Home() {
               disabled={isBusy}
               className="mt-6 w-full bg-[#2d6a4f] px-4 py-3 font-semibold text-white disabled:opacity-60"
             >
-              {isBusy ? 'Opening...' : 'Open dashboard'}
+              {isBusy ? copy.opening : copy.openDashboard}
             </button>
             <p className="mt-4 text-sm text-[#62655f]">
-              Owner demo: owner / owner123. Shop demo: fcroad.admin / Store@4217.
+              {copy.demoCreds}
             </p>
             <p className="mt-2 text-sm text-[#8a3f20]">{message}</p>
           </form>
@@ -537,21 +676,22 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f8f7f2] text-[#20221f]">
-      <header className="border-b border-[#ddd7c7] bg-white">
+    <main className="dashboard-shell min-h-screen bg-[#f8f7f2] text-[#20221f]">
+      <header className="dashboard-header border-b border-[#ddd7c7] bg-white">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-5 py-4">
           <div>
-            <p className="text-xs font-semibold uppercase text-[#66735c]">Store Inventory Management</p>
+            <p className="text-xs font-semibold uppercase text-[#66735c]">{copy.appName}</p>
             <h1 className="text-2xl font-semibold">
-              {session.role === 'owner' ? 'Owner Admin Dashboard' : `${dashboard?.shop.name ?? 'Shop'} Dashboard`}
+              {session.role === 'owner' ? copy.ownerDashboard : `${dashboard?.shop.name ?? 'Shop'} Dashboard`}
             </h1>
           </div>
           <div className="flex items-center gap-3 text-sm">
+            <LanguageToggle lang={lang} setLang={setLang} />
             <span className="border border-[#d8d3c5] bg-[#f8f7f2] px-3 py-2">
-              {isBusy ? 'Syncing...' : message}
+              {isBusy ? copy.syncing : message}
             </span>
             <button onClick={handleLogout} className="border border-[#20221f] px-3 py-2">
-              Logout
+              {copy.logout}
             </button>
           </div>
         </div>
@@ -561,27 +701,27 @@ export default function Home() {
         {session.role === 'owner' ? (
           <>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-              <Metric label="Total shops" value={`${ownerSummary.shopCount}`} />
-              <Metric label="Today sales" value={money(ownerSummary.revenue)} />
-              <Metric label="Today profit" value={money(ownerSummary.profit)} />
-              <Metric label="Stock value" value={money(ownerSummary.inventoryValue)} />
-              <Metric label="Low stock items" value={`${ownerSummary.lowStockCount}`} />
+              <Metric label={copy.totalShops} value={`${ownerSummary.shopCount}`} />
+              <Metric label={copy.todaySales} value={money(ownerSummary.revenue)} />
+              <Metric label={copy.todayProfit} value={money(ownerSummary.profit)} />
+              <Metric label={copy.stockValue} value={money(ownerSummary.inventoryValue)} />
+              <Metric label={copy.lowStockItems} value={`${ownerSummary.lowStockCount}`} />
             </div>
 
             <div className="mt-6 grid gap-5 xl:grid-cols-[1fr_0.75fr]">
-              <section className="border border-[#d8d3c5] bg-white">
+              <section className="panel border border-[#d8d3c5] bg-white">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e2ddcf] px-4 py-3">
-                  <h2 className="text-lg font-semibold">Shop accounts</h2>
-                  <span className="text-sm text-[#62655f]">Credentials are revealed only when generated or reset</span>
+                  <h2 className="text-lg font-semibold">{copy.shopAccounts}</h2>
+                  <span className="text-sm text-[#62655f]">{copy.credentialsHint}</span>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[760px] text-left text-sm">
                     <thead className="bg-[#eef1e9] text-xs uppercase text-[#4f5f48]">
                       <tr>
                         <th className="px-4 py-3">Shop</th>
-                        <th className="px-4 py-3">Area</th>
-                        <th className="px-4 py-3">Username</th>
-                        <th className="px-4 py-3">Items</th>
+                        <th className="px-4 py-3">{copy.area}</th>
+                        <th className="px-4 py-3">{copy.username}</th>
+                        <th className="px-4 py-3">{copy.item}</th>
                         <th className="px-4 py-3">Action</th>
                       </tr>
                     </thead>
@@ -598,13 +738,13 @@ export default function Home() {
                                 onClick={() => void loadOwner(session.token, shop.id)}
                                 className="border border-[#2d6a4f] px-3 py-2 text-[#2d6a4f]"
                               >
-                                View
+                                {copy.view}
                               </button>
                               <button
                                 onClick={() => void resetShopPassword(shop.id)}
                                 className="border border-[#8a3f20] px-3 py-2 text-[#8a3f20]"
                               >
-                                Reset
+                                {copy.reset}
                               </button>
                             </div>
                           </td>
@@ -615,17 +755,17 @@ export default function Home() {
                 </div>
               </section>
 
-              <form onSubmit={handleAddShop} className="border border-[#d8d3c5] bg-white p-4">
-                <h2 className="text-lg font-semibold">Add new shop</h2>
+              <form onSubmit={handleAddShop} className="panel border border-[#d8d3c5] bg-white p-4">
+                <h2 className="text-lg font-semibold">{copy.addNewShop}</h2>
                 <div className="mt-4 grid gap-3">
-                  <Field label="Shop name" name="shopName" />
-                  <Field label="Area" name="area" defaultValue="Pune" />
+                  <Field label={copy.shopName} name="shopName" />
+                  <Field label={copy.area} name="area" defaultValue="Pune" />
                 </div>
                 <button
                   disabled={isBusy}
                   className="mt-4 w-full bg-[#2d6a4f] px-4 py-3 font-semibold text-white disabled:opacity-60"
                 >
-                  Generate shop login
+                  {copy.generateLogin}
                 </button>
                 {credentialNote ? (
                   <p className="mt-3 border border-[#d8d3c5] bg-[#f8f7f2] p-3 font-mono text-xs">
@@ -633,17 +773,16 @@ export default function Home() {
                   </p>
                 ) : (
                   <p className="mt-3 text-sm text-[#62655f]">
-                    New stores start with the standard inventory item list. Copy credentials when they
-                    appear here.
+                    {copy.newShopHint}
                   </p>
                 )}
               </form>
             </div>
 
-            <div className="mt-6 border border-[#d8d3c5] bg-white p-4">
+            <div className="panel mt-6 border border-[#d8d3c5] bg-white p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-lg font-semibold">Manage selected shop</h2>
+                  <h2 className="text-lg font-semibold">{copy.manageShop}</h2>
                   <p className="text-sm text-[#62655f]">
                     {dashboard?.shop.name ?? 'No shop selected'} - {dashboard?.shop.area ?? ''}
                   </p>
@@ -667,6 +806,7 @@ export default function Home() {
         {dashboard ? (
           <ShopDashboard
             dashboard={dashboard}
+            copy={copy}
             selectedItemId={selectedItemId}
             selectedItem={selectedItem}
             metrics={metrics}
@@ -676,7 +816,7 @@ export default function Home() {
             updateClosingCount={updateClosingCount}
           />
         ) : (
-          <section className="mt-6 border border-[#d8d3c5] bg-white p-6">Loading shop data...</section>
+          <section className="panel mt-6 border border-[#d8d3c5] bg-white p-6">{copy.loading}</section>
         )}
       </section>
     </main>
@@ -685,6 +825,7 @@ export default function Home() {
 
 function ShopDashboard({
   dashboard,
+  copy,
   selectedItemId,
   selectedItem,
   metrics,
@@ -694,6 +835,7 @@ function ShopDashboard({
   updateClosingCount,
 }: {
   dashboard: ShopDashboardData;
+  copy: (typeof dictionary)[Lang];
   selectedItemId: string;
   selectedItem?: Item;
   metrics: {
@@ -712,30 +854,32 @@ function ShopDashboard({
   return (
     <>
       <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <Metric label="Selected shop" value={dashboard.shop.name} />
-        <Metric label="Today sales" value={money(metrics.revenue)} />
-        <Metric label="Today profit" value={money(metrics.profit)} />
-        <Metric label="Units sold" value={`${metrics.units} pcs`} />
-        <Metric label="Highest seller" value={metrics.topSeller} />
+        <Metric label={copy.selectedShop} value={dashboard.shop.name} />
+        <Metric label={copy.todaySales} value={money(metrics.revenue)} />
+        <Metric label={copy.todayProfit} value={money(metrics.profit)} />
+        <Metric label={copy.unitsSold} value={`${metrics.units} pcs`} />
+        <Metric label={copy.highestSeller} value={metrics.topSeller} />
       </div>
 
       <div className="mt-6 grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
-        <section className="border border-[#d8d3c5] bg-white">
+        <section className="panel border border-[#d8d3c5] bg-white">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e2ddcf] px-4 py-3">
-            <h2 className="text-lg font-semibold">Available shop items</h2>
-            <span className="text-sm text-[#62655f]">{dashboard.items.length} active items</span>
+            <h2 className="text-lg font-semibold">{copy.availableItems}</h2>
+            <span className="text-sm text-[#62655f]">
+              {dashboard.items.length} {copy.activeItems}
+            </span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[780px] text-left text-sm">
               <thead className="bg-[#eef1e9] text-xs uppercase text-[#4f5f48]">
                 <tr>
-                  <th className="px-4 py-3">Item</th>
-                  <th className="px-4 py-3">Category</th>
-                  <th className="px-4 py-3">Buy</th>
-                  <th className="px-4 py-3">Sell</th>
-                  <th className="px-4 py-3">Stock</th>
-                  <th className="px-4 py-3">Closing count</th>
-                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">{copy.item}</th>
+                  <th className="px-4 py-3">{copy.category}</th>
+                  <th className="px-4 py-3">{copy.buy}</th>
+                  <th className="px-4 py-3">{copy.sell}</th>
+                  <th className="px-4 py-3">{copy.stock}</th>
+                  <th className="px-4 py-3">{copy.closingCount}</th>
+                  <th className="px-4 py-3">{copy.status}</th>
                 </tr>
               </thead>
               <tbody>
@@ -767,7 +911,7 @@ function ShopDashboard({
                             : 'bg-[#dfeadb] px-2 py-1 text-[#2d6a4f]'
                         }
                       >
-                        {item.stock <= item.reorderLevel ? 'Restock' : 'OK'}
+                        {item.stock <= item.reorderLevel ? copy.restock : copy.ok}
                       </span>
                     </td>
                   </tr>
@@ -778,10 +922,10 @@ function ShopDashboard({
         </section>
 
         <section className="grid gap-5">
-          <form onSubmit={handleRecordSale} className="border border-[#d8d3c5] bg-white p-4">
-            <h2 className="text-lg font-semibold">Record sold product</h2>
+          <form onSubmit={handleRecordSale} className="panel border border-[#d8d3c5] bg-white p-4">
+            <h2 className="text-lg font-semibold">{copy.recordSold}</h2>
             <label className="mt-4 block text-sm font-medium" htmlFor="sale-item">
-              Product
+              {copy.product}
             </label>
             <select
               id="sale-item"
@@ -796,40 +940,40 @@ function ShopDashboard({
               ))}
             </select>
             <div className="mt-4 grid grid-cols-2 gap-3">
-              <Field label="Qty sold" name="qty" type="number" defaultValue="1" />
+              <Field label={copy.qtySold} name="qty" type="number" defaultValue="1" />
               <Field
                 key={selectedItemId}
-                label="Sold price per pc"
+                label={copy.soldPrice}
                 name="soldPrice"
                 type="number"
                 defaultValue={String(selectedItem?.defaultSellingPrice ?? 0)}
               />
             </div>
             <button className="mt-4 w-full bg-[#2d6a4f] px-4 py-3 font-semibold text-white">
-              Save sale
+              {copy.saveSale}
             </button>
           </form>
 
-          <form onSubmit={handleAddItem} className="border border-[#d8d3c5] bg-white p-4">
-            <h2 className="text-lg font-semibold">Add custom shop item</h2>
+          <form onSubmit={handleAddItem} className="panel border border-[#d8d3c5] bg-white p-4">
+            <h2 className="text-lg font-semibold">{copy.addItem}</h2>
             <div className="mt-4 grid grid-cols-2 gap-3">
-              <Field label="Item name" name="name" />
-              <Field label="Category" name="category" defaultValue="General" />
-              <Field label="Buying price" name="buyingPrice" type="number" />
-              <Field label="Selling price" name="sellingPrice" type="number" />
-              <Field label="Total qty" name="stock" type="number" />
-              <Field label="Restock alert" name="reorderLevel" type="number" defaultValue="5" />
+              <Field label={copy.itemName} name="name" />
+              <Field label={copy.category} name="category" defaultValue="General" />
+              <Field label={copy.buyingPrice} name="buyingPrice" type="number" />
+              <Field label={copy.sellingPrice} name="sellingPrice" type="number" />
+              <Field label={copy.totalQty} name="stock" type="number" />
+              <Field label={copy.restockAlert} name="reorderLevel" type="number" defaultValue="5" />
             </div>
             <button className="mt-4 w-full border border-[#2d6a4f] px-4 py-3 font-semibold text-[#2d6a4f]">
-              Add item
+              {copy.addItemAction}
             </button>
           </form>
         </section>
       </div>
 
       <div className="mt-5 grid gap-5 lg:grid-cols-2">
-        <section className="border border-[#d8d3c5] bg-white p-4">
-          <h2 className="text-lg font-semibold">Low stock analysis</h2>
+        <section className="panel border border-[#d8d3c5] bg-white p-4">
+          <h2 className="text-lg font-semibold">{copy.lowStockAnalysis}</h2>
           <div className="mt-3 space-y-2">
             {metrics.lowStock.length ? (
               metrics.lowStock.map((item) => (
@@ -839,13 +983,13 @@ function ShopDashboard({
                 </div>
               ))
             ) : (
-              <p className="text-sm text-[#62655f]">No low stock items today.</p>
+              <p className="text-sm text-[#62655f]">{copy.noLowStock}</p>
             )}
           </div>
         </section>
 
-        <section className="border border-[#d8d3c5] bg-white p-4">
-          <h2 className="text-lg font-semibold">Today sales log</h2>
+        <section className="panel border border-[#d8d3c5] bg-white p-4">
+          <h2 className="text-lg font-semibold">{copy.todaySalesLog}</h2>
           <div className="mt-3 max-h-64 space-y-2 overflow-auto">
             {metrics.todaysSales.length ? (
               metrics.todaysSales.map((sale) => (
@@ -857,7 +1001,7 @@ function ShopDashboard({
                 </div>
               ))
             ) : (
-              <p className="text-sm text-[#62655f]">Sales added today will appear here.</p>
+              <p className="text-sm text-[#62655f]">{copy.noSales}</p>
             )}
           </div>
         </section>
@@ -875,6 +1019,27 @@ const Metric = memo(function Metric({ label, value }: { label: string; value: st
   );
 });
 
+function LanguageToggle({ lang, setLang }: { lang: Lang; setLang: (lang: Lang) => void }) {
+  return (
+    <div className="language-toggle" aria-label="Language selector">
+      <button
+        type="button"
+        className={lang === 'en' ? 'active' : ''}
+        onClick={() => setLang('en')}
+      >
+        EN
+      </button>
+      <button
+        type="button"
+        className={lang === 'mr' ? 'active' : ''}
+        onClick={() => setLang('mr')}
+      >
+        मर
+      </button>
+    </div>
+  );
+}
+
 const Field = memo(function Field({
   label,
   name,
@@ -887,7 +1052,7 @@ const Field = memo(function Field({
   defaultValue?: string;
 }) {
   return (
-    <label className="block text-sm font-medium">
+    <label className="form-field block text-sm font-medium">
       {label}
       <input
         name={name}
