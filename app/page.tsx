@@ -58,6 +58,12 @@ type Session = {
   shopId?: string;
 };
 
+type CredentialNote = {
+  username: string;
+  password: string;
+  label: string;
+};
+
 type Lang = 'en' | 'mr';
 
 const dictionary = {
@@ -75,7 +81,9 @@ const dictionary = {
     password: 'Password',
     openDashboard: 'Open dashboard',
     opening: 'Opening...',
-    demoCreds: 'Owner demo: owner / owner123. Shop demo: fcroad.admin / Store@4217.',
+    loginHint: 'Use your owner or shop credentials. Ask the owner admin to reset a shop password if needed.',
+    configMissing:
+      'Supabase is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in Vercel.',
     ownerDashboard: 'Owner Admin Dashboard',
     shopAccounts: 'Shop accounts',
     credentialsHint: 'Credentials are revealed only when generated or reset',
@@ -125,6 +133,9 @@ const dictionary = {
     logout: 'Logout',
     view: 'View',
     reset: 'Reset',
+    copy: 'Copy',
+    copied: 'Copied',
+    generatedCredential: 'Generated credential',
   },
   mr: {
     appName: 'स्टोअर इन्व्हेंटरी व्यवस्थापन',
@@ -140,7 +151,9 @@ const dictionary = {
     password: 'पासवर्ड',
     openDashboard: 'डॅशबोर्ड उघडा',
     opening: 'उघडत आहे...',
-    demoCreds: 'मालक डेमो: owner / owner123. दुकान डेमो: fcroad.admin / Store@4217.',
+    loginHint: 'मालक किंवा दुकान क्रेडेन्शियल्स वापरा. गरज असल्यास मालक अॅडमिनकडून दुकान पासवर्ड रीसेट करा.',
+    configMissing:
+      'Supabase कॉन्फिगर केलेले नाही. Vercel मध्ये NEXT_PUBLIC_SUPABASE_URL आणि NEXT_PUBLIC_SUPABASE_ANON_KEY जोडा.',
     ownerDashboard: 'मालक अॅडमिन डॅशबोर्ड',
     shopAccounts: 'दुकान खाती',
     credentialsHint: 'क्रेडेन्शियल्स फक्त तयार किंवा रीसेट केल्यावर दिसतील',
@@ -190,6 +203,9 @@ const dictionary = {
     logout: 'लॉगआउट',
     view: 'पहा',
     reset: 'रीसेट',
+    copy: 'कॉपी',
+    copied: 'कॉपी झाले',
+    generatedCredential: 'जनरेटेड क्रेडेन्शियल',
   },
 } satisfies Record<Lang, Record<string, string>>;
 
@@ -270,7 +286,7 @@ export default function Home() {
   const [selectedShopId, setSelectedShopId] = useState('');
   const [selectedItemId, setSelectedItemId] = useState('');
   const [message, setMessage] = useState('Ready for today');
-  const [credentialNote, setCredentialNote] = useState('');
+  const [credentialNote, setCredentialNote] = useState<CredentialNote | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [lang, setLang] = useState<Lang>('en');
   const copy = dictionary[lang];
@@ -443,7 +459,7 @@ export default function Home() {
     }
     setSession(null);
     setDashboard(null);
-    setCredentialNote('');
+    setCredentialNote(null);
     window.localStorage.removeItem(sessionKey);
   }
 
@@ -470,7 +486,11 @@ export default function Home() {
       });
       const shop = getRpcData<Record<string, unknown>>(data, error);
       const shopId = String(shop.id);
-      setCredentialNote(`New login: ${shop.username} / ${shop.password}`);
+      setCredentialNote({
+        label: String(shop.name),
+        username: String(shop.username),
+        password: String(shop.password),
+      });
       setMessage(`${shop.name} created`);
       event.currentTarget.reset();
       await loadOwner(session.token, shopId);
@@ -493,7 +513,11 @@ export default function Home() {
         p_password: password,
       });
       const shop = getRpcData<Record<string, unknown>>(data, error);
-      setCredentialNote(`Reset login: ${shop.username} / ${shop.password}`);
+      setCredentialNote({
+        label: String(shop.name),
+        username: String(shop.username),
+        password: String(shop.password),
+      });
       setMessage(`${shop.name} password reset`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not reset password');
@@ -640,12 +664,19 @@ export default function Home() {
 
           <form onSubmit={handleLogin} className="auth-card border border-[#d8d3c5] bg-white p-6 shadow-sm">
             <h2 className="text-2xl font-semibold">{copy.adminLogin}</h2>
+            {!isSupabaseConfigured ? (
+              <p className="mt-4 rounded-lg border border-[#f0c7a5] bg-[#fff1df] px-3 py-2 text-sm text-[#8a3f20]">
+                {copy.configMissing}
+              </p>
+            ) : null}
             <label className="mt-6 block text-sm font-medium" htmlFor="username">
               {copy.username}
             </label>
             <input
               id="username"
               name="username"
+              required
+              autoComplete="username"
               className="mt-2 w-full border border-[#cfc8b8] px-3 py-3 outline-none focus:border-[#2d6a4f]"
               placeholder="owner"
             />
@@ -656,19 +687,23 @@ export default function Home() {
               id="password"
               name="password"
               type="password"
+              required
+              autoComplete="current-password"
               className="mt-2 w-full border border-[#cfc8b8] px-3 py-3 outline-none focus:border-[#2d6a4f]"
               placeholder="owner123"
             />
             <button
-              disabled={isBusy}
+              disabled={isBusy || !isSupabaseConfigured}
               className="mt-6 w-full bg-[#2d6a4f] px-4 py-3 font-semibold text-white disabled:opacity-60"
             >
               {isBusy ? copy.opening : copy.openDashboard}
             </button>
             <p className="mt-4 text-sm text-[#62655f]">
-              {copy.demoCreds}
+              {copy.loginHint}
             </p>
-            <p className="mt-2 text-sm text-[#8a3f20]">{message}</p>
+            <p className="mt-2 text-sm text-[#8a3f20]" role="status" aria-live="polite">
+              {message}
+            </p>
           </form>
         </section>
       </main>
@@ -690,7 +725,7 @@ export default function Home() {
             <span className="border border-[#d8d3c5] bg-[#f8f7f2] px-3 py-2">
               {isBusy ? copy.syncing : message}
             </span>
-            <button onClick={handleLogout} className="border border-[#20221f] px-3 py-2">
+            <button type="button" onClick={handleLogout} className="border border-[#20221f] px-3 py-2">
               {copy.logout}
             </button>
           </div>
@@ -735,12 +770,14 @@ export default function Home() {
                           <td className="px-4 py-3">
                             <div className="flex gap-2">
                               <button
+                                type="button"
                                 onClick={() => void loadOwner(session.token, shop.id)}
                                 className="border border-[#2d6a4f] px-3 py-2 text-[#2d6a4f]"
                               >
                                 {copy.view}
                               </button>
                               <button
+                                type="button"
                                 onClick={() => void resetShopPassword(shop.id)}
                                 className="border border-[#8a3f20] px-3 py-2 text-[#8a3f20]"
                               >
@@ -758,8 +795,8 @@ export default function Home() {
               <form onSubmit={handleAddShop} className="panel border border-[#d8d3c5] bg-white p-4">
                 <h2 className="text-lg font-semibold">{copy.addNewShop}</h2>
                 <div className="mt-4 grid gap-3">
-                  <Field label={copy.shopName} name="shopName" />
-                  <Field label={copy.area} name="area" defaultValue="Pune" />
+                  <Field label={copy.shopName} name="shopName" required />
+                  <Field label={copy.area} name="area" defaultValue="Pune" required />
                 </div>
                 <button
                   disabled={isBusy}
@@ -768,9 +805,7 @@ export default function Home() {
                   {copy.generateLogin}
                 </button>
                 {credentialNote ? (
-                  <p className="mt-3 border border-[#d8d3c5] bg-[#f8f7f2] p-3 font-mono text-xs">
-                    {credentialNote}
-                  </p>
+                  <CredentialCard credential={credentialNote} copy={copy} />
                 ) : (
                   <p className="mt-3 text-sm text-[#62655f]">
                     {copy.newShopHint}
@@ -957,11 +992,11 @@ function ShopDashboard({
           <form onSubmit={handleAddItem} className="panel border border-[#d8d3c5] bg-white p-4">
             <h2 className="text-lg font-semibold">{copy.addItem}</h2>
             <div className="mt-4 grid grid-cols-2 gap-3">
-              <Field label={copy.itemName} name="name" />
-              <Field label={copy.category} name="category" defaultValue="General" />
-              <Field label={copy.buyingPrice} name="buyingPrice" type="number" />
-              <Field label={copy.sellingPrice} name="sellingPrice" type="number" />
-              <Field label={copy.totalQty} name="stock" type="number" />
+              <Field label={copy.itemName} name="name" required />
+              <Field label={copy.category} name="category" defaultValue="General" required />
+              <Field label={copy.buyingPrice} name="buyingPrice" type="number" required />
+              <Field label={copy.sellingPrice} name="sellingPrice" type="number" required />
+              <Field label={copy.totalQty} name="stock" type="number" required />
               <Field label={copy.restockAlert} name="reorderLevel" type="number" defaultValue="5" />
             </div>
             <button className="mt-4 w-full border border-[#2d6a4f] px-4 py-3 font-semibold text-[#2d6a4f]">
@@ -1040,16 +1075,50 @@ function LanguageToggle({ lang, setLang }: { lang: Lang; setLang: (lang: Lang) =
   );
 }
 
+function CredentialCard({
+  credential,
+  copy,
+}: {
+  credential: CredentialNote;
+  copy: (typeof dictionary)[Lang];
+}) {
+  const [copied, setCopied] = useState(false);
+  const credentialText = `${credential.username} / ${credential.password}`;
+
+  async function copyCredential() {
+    await navigator.clipboard.writeText(credentialText);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1800);
+  }
+
+  return (
+    <div className="credential-card mt-3 border border-[#d8d3c5] bg-[#f8f7f2] p-3">
+      <p className="text-xs font-semibold uppercase text-[#66735c]">{copy.generatedCredential}</p>
+      <p className="mt-1 text-sm font-semibold">{credential.label}</p>
+      <p className="mt-2 break-all font-mono text-xs">{credentialText}</p>
+      <button
+        type="button"
+        onClick={() => void copyCredential()}
+        className="mt-3 border border-[#2d6a4f] px-3 py-2 text-sm font-semibold text-[#2d6a4f]"
+      >
+        {copied ? copy.copied : copy.copy}
+      </button>
+    </div>
+  );
+}
+
 const Field = memo(function Field({
   label,
   name,
   type = 'text',
   defaultValue,
+  required = false,
 }: {
   label: string;
   name: string;
   type?: string;
   defaultValue?: string;
+  required?: boolean;
 }) {
   return (
     <label className="form-field block text-sm font-medium">
@@ -1060,6 +1129,7 @@ const Field = memo(function Field({
         min={type === 'number' ? '0' : undefined}
         step={type === 'number' ? '0.01' : undefined}
         defaultValue={defaultValue}
+        required={required}
         className="mt-2 w-full border border-[#cfc8b8] px-3 py-3 font-normal outline-none focus:border-[#2d6a4f]"
       />
     </label>

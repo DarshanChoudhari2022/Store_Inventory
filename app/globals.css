@@ -66,6 +66,10 @@ button:active:not(:disabled) {
   transform: translateY(0);
 }
 
+button:disabled {
+  cursor: not-allowed;
+}
+
 button:focus-visible,
 input:focus-visible,
 select:focus-visible {
@@ -213,6 +217,14 @@ select:focus {
 .language-toggle button.active {
   color: #ffffff;
   background: var(--primary);
+}
+
+.credential-card {
+  border-radius: 8px;
+}
+
+.credential-card button {
+  min-height: 36px;
 }
 
 table {
