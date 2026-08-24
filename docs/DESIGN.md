@@ -46,11 +46,11 @@ The sale form keeps the most common workflow compact:
 3. Enter sold price per piece.
 4. Save sale.
 
-The sold price is editable because tapri pricing can vary by customer, loose item, pack, or time.
+The sold price is editable because store pricing can vary by customer, loose item, pack, or time.
 
 ### Shop Account Creation
 
-The owner admin can create a shop with just shop name and area. The system generates a practical username from the shop name and a password with a clear `Tapri@0000` pattern for demo use. Production should generate stronger one-time passwords and force reset on first login.
+The owner admin can create a shop with just shop name and area. The system generates a practical username from the shop name and a password with a clear `Store@0000` pattern for demo use. Production should generate stronger one-time passwords and force reset on first login.
 
 ### Shop Switching
 

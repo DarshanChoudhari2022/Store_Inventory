@@ -1,6 +1,6 @@
-# Tapri Inventory Manager
+# Store Inventory Management
 
-A small-store inventory dashboard for a Pune tapri owner/admin. It supports multiple shops, generated shop usernames/passwords, shop-wise inventory, daily sales, item profit, buying price, selling price, low stock, highest selling product, closing stock updates, and Supabase-backed persistence.
+A store inventory dashboard for a Pune store owner/admin. It supports multiple stores, generated store usernames/passwords, store-wise inventory, daily sales, item profit, buying price, selling price, low stock, highest selling product, closing stock updates, and Supabase-backed persistence.
 
 ## Run Locally
 
@@ -32,7 +32,7 @@ npm run dev
 Demo credentials:
 
 - Owner: `owner` / `owner123`
-- Shop: `fcroad.admin` / `Tapri@4217`
+- Shop: `fcroad.admin` / `Store@4217`
 
 ## Supabase Setup
 

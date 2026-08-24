@@ -114,12 +114,12 @@ Owner-level calculations aggregate today's sales and inventory value across all 
 Seed credentials:
 
 - Owner: `owner` / `owner123`
-- Seed shop: `fcroad.admin` / `Tapri@4217`
+- Seed shop: `fcroad.admin` / `Store@4217`
 
 When the owner creates a new shop, the app generates:
 
 - Username: normalized shop slug plus `.admin`
-- Password: `Tapri@` plus a random four-digit number
+- Password: `Store@` plus a random four-digit number
 
 The plaintext password is passed once to Supabase, hashed there, and shown to the owner immediately. Existing passwords are not readable.
 

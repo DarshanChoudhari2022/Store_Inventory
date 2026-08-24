@@ -63,7 +63,7 @@ const supabaseAnonKey =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlycHVldGFyeHR1dm5oZW5raWdyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1NTI5NTQsImV4cCI6MjEwMzEyODk1NH0.Euw5G9m-R-oVnJmS14FX4TV_IoGDO59Zgjw58Kh8lhw';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-const sessionKey = 'tapri-supabase-session-v1';
+const sessionKey = 'store-inventory-session-v1';
 
 const money = (value: number) => `Rs ${Math.round(value).toLocaleString('en-IN')}`;
 const numeric = (value: FormDataEntryValue | null) => Number(value || 0);
@@ -74,7 +74,7 @@ const cleanSlug = (value: string) =>
     .replace(/(^-|-$)/g, '');
 
 function generatePassword() {
-  return `Tapri@${Math.floor(1000 + Math.random() * 9000)}`;
+  return `Store@${Math.floor(1000 + Math.random() * 9000)}`;
 }
 
 function toNumber(value: unknown) {
@@ -472,7 +472,7 @@ export default function Home() {
       <main className="min-h-screen bg-[#f8f7f2] text-[#20221f]">
         <section className="mx-auto grid min-h-screen max-w-6xl items-center gap-10 px-5 py-8 lg:grid-cols-[1.1fr_0.9fr]">
           <div>
-            <p className="text-sm font-semibold uppercase text-[#66735c]">Tapri stock desk</p>
+            <p className="text-sm font-semibold uppercase text-[#66735c]">Store stock desk</p>
             <h1 className="mt-3 max-w-2xl text-4xl font-semibold leading-tight sm:text-6xl">
               Multi-shop inventory backed by Supabase
             </h1>
@@ -517,7 +517,7 @@ export default function Home() {
               {isBusy ? 'Opening...' : 'Open dashboard'}
             </button>
             <p className="mt-4 text-sm text-[#62655f]">
-              Owner demo: owner / owner123. Shop demo: fcroad.admin / Tapri@4217.
+              Owner demo: owner / owner123. Shop demo: fcroad.admin / Store@4217.
             </p>
             <p className="mt-2 text-sm text-[#8a3f20]">{message}</p>
           </form>
@@ -531,7 +531,7 @@ export default function Home() {
       <header className="border-b border-[#ddd7c7] bg-white">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-5 py-4">
           <div>
-            <p className="text-xs font-semibold uppercase text-[#66735c]">Pune Tapri Inventory</p>
+            <p className="text-xs font-semibold uppercase text-[#66735c]">Store Inventory Management</p>
             <h1 className="text-2xl font-semibold">
               {session.role === 'owner' ? 'Owner Admin Dashboard' : `${dashboard?.shop.name ?? 'Shop'} Dashboard`}
             </h1>
@@ -623,7 +623,7 @@ export default function Home() {
                   </p>
                 ) : (
                   <p className="mt-3 text-sm text-[#62655f]">
-                    New shops start with the standard tapri item list. Copy credentials when they
+                    New stores start with the standard inventory item list. Copy credentials when they
                     appear here.
                   </p>
                 )}

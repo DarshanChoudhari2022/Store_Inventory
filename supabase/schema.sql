@@ -484,9 +484,19 @@ on conflict (username) do nothing;
 
 insert into shops(name, area, username, password_hash)
 values
-  ('FC Road Tapri', 'Shivajinagar, Pune', 'fcroad.admin', crypt('Tapri@4217', gen_salt('bf'))),
-  ('Kothrud Corner Shop', 'Kothrud, Pune', 'kothrud.admin', crypt('Tapri@8362', gen_salt('bf')))
+  ('FC Road Store', 'Shivajinagar, Pune', 'fcroad.admin', crypt('Store@4217', gen_salt('bf'))),
+  ('Kothrud Corner Store', 'Kothrud, Pune', 'kothrud.admin', crypt('Store@8362', gen_salt('bf')))
 on conflict (username) do nothing;
+
+update shops
+set name = 'FC Road Store',
+    password_hash = crypt('Store@4217', gen_salt('bf'))
+where username = 'fcroad.admin';
+
+update shops
+set name = 'Kothrud Corner Store',
+    password_hash = crypt('Store@8362', gen_salt('bf'))
+where username = 'kothrud.admin';
 
 insert into items(shop_id, name, category, buying_price, default_selling_price, stock, reorder_level)
 select shop.id, item.name, item.category, item.buying_price, item.default_selling_price, item.stock, item.reorder_level

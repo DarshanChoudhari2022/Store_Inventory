@@ -1,8 +1,8 @@
-# Product Requirements Document: Tapri Inventory Manager
+# Product Requirements Document: Store Inventory Management
 
 ## 1. Product Summary
 
-Tapri Inventory Manager is a lightweight admin dashboard for a Pune small-shop owner who manages one or more tapris. The owner can create shop accounts, generate usernames and passwords for each shop, maintain shop-wise item lists, record sold products at the actual sale price, update closing stock at the end of each day, and view sales, profit, and stock analysis.
+Store Inventory Management is a lightweight admin dashboard for a Pune small-store owner who manages one or more stores. The owner can create store accounts, generate usernames and passwords for each shop/store, maintain store-wise item lists, record sold products at the actual sale price, update closing stock at the end of each day, and view sales, profit, and stock analysis.
 
 ## 2. Problem
 
@@ -36,7 +36,7 @@ Small shop owners often track stock mentally or in a notebook. This creates four
 
 ## 5. Primary User
 
-The first user is a tapri owner/admin in Pune who may operate multiple counters. He needs to add shops, give each shop a simple login, and still see combined owner-level performance. Shop staff need a focused shop dashboard for daily sales and closing stock.
+The first user is a store owner/admin in Pune who may operate multiple counters. He needs to add shops, give each shop a simple login, and still see combined owner-level performance. Shop staff need a focused shop dashboard for daily sales and closing stock.
 
 ## 6. Core Workflows
 
@@ -99,7 +99,7 @@ V1 prototype uses local login only. Production should use mobile OTP or password
 - Owner PIN for profit numbers, while helper can only enter sales.
 - Shop user permissions, so staff can update sales/stock but cannot see other shops.
 - Credential expiry and forced password reset after first login.
-- Shop-wise comparison: which tapri has better sales and margins.
+- Shop-wise comparison: which store has better sales and margins.
 - Price change history to understand margin changes.
 - Spoilage/damage entry for broken packs or unusable stock.
 - Daily cash tally: opening cash, sales cash, expenses, closing cash.
@@ -124,7 +124,7 @@ Included in current prototype:
 - Shop password reset.
 - Shop-scoped login and dashboard.
 - Supabase-backed cloud data storage.
-- Inventory list seeded with common tapri items.
+- Inventory list seeded with common store items.
 - Add custom item form.
 - Record sale form with actual sold price.
 - Automatic stock decrement.

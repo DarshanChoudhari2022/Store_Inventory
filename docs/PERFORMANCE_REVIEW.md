@@ -2,7 +2,7 @@
 
 ## Verdict
 
-The current app is a strong MVP for a Pune tapri inventory product and is now much healthier after the Supabase integration. It is good enough for pilot usage across a small number of shops, but it is not yet a mature 100-store SaaS system.
+The current app is a strong MVP for a Pune store inventory product and is now much healthier after the Supabase integration. It is good enough for pilot usage across a small number of shops, but it is not yet a mature 100-store SaaS system.
 
 Current stack rating: **7/10**
 
