@@ -48,6 +48,13 @@ create table if not exists app_sessions (
   created_at timestamptz not null default now()
 );
 
+create index if not exists idx_app_sessions_role_expires on app_sessions(role, expires_at);
+create index if not exists idx_app_sessions_shop_expires on app_sessions(shop_id, expires_at);
+create index if not exists idx_items_shop_created on items(shop_id, created_at);
+create index if not exists idx_items_shop_stock on items(shop_id, stock, reorder_level);
+create index if not exists idx_sales_shop_date_created on sales(shop_id, sale_date, created_at desc);
+create index if not exists idx_sales_date on sales(sale_date);
+
 alter table owner_accounts enable row level security;
 alter table shops enable row level security;
 alter table items enable row level security;
@@ -368,14 +375,17 @@ begin
 end;
 $$;
 
+drop function if exists public.update_stock(uuid, uuid, integer);
+
 create or replace function public.update_stock(p_token uuid, p_item_id uuid, p_stock integer)
-returns void
+returns jsonb
 language plpgsql
 security definer
 set search_path = public, extensions
 as $$
 declare
   target_shop uuid;
+  updated_item items%rowtype;
 begin
   select shop_id into target_shop from items where id = p_item_id;
 
@@ -383,7 +393,20 @@ begin
     raise exception 'Shop access required';
   end if;
 
-  update items set stock = greatest(coalesce(p_stock, 0), 0) where id = p_item_id;
+  update items
+  set stock = greatest(coalesce(p_stock, 0), 0)
+  where id = p_item_id
+  returning * into updated_item;
+
+  return jsonb_build_object(
+    'id', updated_item.id,
+    'name', updated_item.name,
+    'category', updated_item.category,
+    'buyingPrice', updated_item.buying_price,
+    'defaultSellingPrice', updated_item.default_selling_price,
+    'stock', updated_item.stock,
+    'reorderLevel', updated_item.reorder_level
+  );
 end;
 $$;
 
@@ -438,7 +461,8 @@ begin
     'qty', new_sale.qty,
     'buyingPrice', new_sale.buying_price,
     'soldPrice', new_sale.sold_price,
-    'date', new_sale.sale_date
+    'date', new_sale.sale_date,
+    'remainingStock', item_row.stock - sellable_qty
   );
 end;
 $$;

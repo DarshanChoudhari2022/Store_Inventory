@@ -1,7 +1,7 @@
 'use client';
 
 import { createClient } from '@supabase/supabase-js';
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, memo, useEffect, useMemo, useState } from 'react';
 
 type Item = {
   id: string;
@@ -225,6 +225,18 @@ export default function Home() {
     if (nextShopId) await loadShop(token, nextShopId);
   }
 
+  async function loadOwnerSummary(token: string) {
+    const { data, error } = await supabase.rpc('owner_summary', { p_token: token });
+    const summary = getRpcData<Record<string, unknown>>(data, error);
+    setOwnerSummary({
+      shopCount: toNumber(summary.shopCount),
+      revenue: toNumber(summary.revenue),
+      profit: toNumber(summary.profit),
+      inventoryValue: toNumber(summary.inventoryValue),
+      lowStockCount: toNumber(summary.lowStockCount),
+    });
+  }
+
   async function loadShop(token: string, shopId: string) {
     const { data, error } = await supabase.rpc('get_shop_dashboard', {
       p_token: token,
@@ -247,12 +259,6 @@ export default function Home() {
     });
     setSelectedShopId(String(shop.id));
     setSelectedItemId(items[0]?.id ?? '');
-  }
-
-  async function refreshCurrentShop() {
-    if (!session || !selectedShopId) return;
-    await loadShop(session.token, selectedShopId);
-    if (session.role === 'owner') await loadOwner(session.token, selectedShopId);
   }
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
@@ -373,7 +379,20 @@ export default function Home() {
       setSelectedItemId(item.id);
       setMessage(`${item.name} added to ${dashboard.shop.name}`);
       event.currentTarget.reset();
-      await refreshCurrentShop();
+      setDashboard((current) =>
+        current
+          ? {
+              ...current,
+              items: [...current.items, item],
+            }
+          : current,
+      );
+      setShops((current) =>
+        current.map((shop) =>
+          shop.id === dashboard.shop.id ? { ...shop, itemCount: shop.itemCount + 1 } : shop,
+        ),
+      );
+      if (session.role === 'owner') await loadOwnerSummary(session.token);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not add item');
     } finally {
@@ -395,10 +414,23 @@ export default function Home() {
         p_qty: Math.max(1, numeric(form.get('qty'))),
         p_sold_price: Math.max(0, numeric(form.get('soldPrice'))),
       });
-      const sale = mapSale(getRpcData<Record<string, unknown>>(data, error));
+      const rawSale = getRpcData<Record<string, unknown>>(data, error);
+      const sale = mapSale(rawSale);
+      const remainingStock = toNumber(rawSale.remainingStock);
       setMessage(`Sold ${sale.qty} ${sale.itemName} at ${dashboard.shop.name}`);
       event.currentTarget.reset();
-      await refreshCurrentShop();
+      setDashboard((current) =>
+        current
+          ? {
+              ...current,
+              items: current.items.map((item) =>
+                item.id === selectedItem.id ? { ...item, stock: remainingStock } : item,
+              ),
+              todaysSales: [sale, ...current.todaysSales],
+            }
+          : current,
+      );
+      if (session.role === 'owner') await loadOwnerSummary(session.token);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not record sale');
     } finally {
@@ -411,14 +443,23 @@ export default function Home() {
 
     try {
       setIsBusy(true);
-      const { error } = await supabase.rpc('update_stock', {
+      const { data, error } = await supabase.rpc('update_stock', {
         p_token: session.token,
         p_item_id: itemId,
         p_stock: stock,
       });
       if (error) throw new Error(error.message);
+      const updatedItem = mapItem(getRpcData<Record<string, unknown>>(data, null));
       setMessage('Closing stock updated');
-      await refreshCurrentShop();
+      setDashboard((current) =>
+        current
+          ? {
+              ...current,
+              items: current.items.map((item) => (item.id === itemId ? updatedItem : item)),
+            }
+          : current,
+      );
+      if (session.role === 'owner') await loadOwnerSummary(session.token);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not update stock');
     } finally {
@@ -701,7 +742,10 @@ function ShopDashboard({
                         type="number"
                         min="0"
                         defaultValue={item.stock}
-                        onBlur={(event) => void updateClosingCount(item.id, Number(event.target.value))}
+                        onBlur={(event) => {
+                          const nextStock = Number(event.target.value);
+                          if (nextStock !== item.stock) void updateClosingCount(item.id, nextStock);
+                        }}
                         className="w-24 border border-[#cfc8b8] px-2 py-2"
                       />
                     </td>
@@ -812,16 +856,16 @@ function ShopDashboard({
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+const Metric = memo(function Metric({ label, value }: { label: string; value: string }) {
   return (
     <article className="border border-[#d8d3c5] bg-white p-4">
       <p className="text-xs font-semibold uppercase text-[#66735c]">{label}</p>
       <p className="mt-2 text-2xl font-semibold">{value}</p>
     </article>
   );
-}
+});
 
-function Field({
+const Field = memo(function Field({
   label,
   name,
   type = 'text',
@@ -845,4 +889,4 @@ function Field({
       />
     </label>
   );
-}
+});
