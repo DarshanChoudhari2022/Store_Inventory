@@ -9,6 +9,15 @@ npm install
 npm run dev
 ```
 
+Create `.env.local` before running locally:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=https://yrpuetarxtuvnhenkigr.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-public-key
+```
+
+For Vercel, add the same two variables in Project Settings > Environment Variables.
+
 ## Documentation
 
 - [PRD](docs/PRD.md)

@@ -58,10 +58,12 @@ type Session = {
   shopId?: string;
 };
 
-const supabaseUrl = 'https://yrpuetarxtuvnhenkigr.supabase.co';
-const supabaseAnonKey =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlycHVldGFyeHR1dm5oZW5raWdyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1NTI5NTQsImV4cCI6MjEwMzEyODk1NH0.Euw5G9m-R-oVnJmS14FX4TV_IoGDO59Zgjw58Kh8lhw';
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+const supabase = isSupabaseConfigured
+  ? createClient(supabaseUrl as string, supabaseAnonKey as string)
+  : null;
 
 const sessionKey = 'store-inventory-session-v1';
 
@@ -109,6 +111,14 @@ function getRpcData<T>(data: T | null, error: { message?: string } | null) {
   if (error) throw new Error(error.message || 'Supabase request failed');
   if (data === null) throw new Error('Supabase returned no data');
   return data;
+}
+
+function getSupabaseClient() {
+  if (!supabase) {
+    throw new Error('Supabase environment variables are missing.');
+  }
+
+  return supabase;
 }
 
 export default function Home() {
@@ -196,8 +206,8 @@ export default function Home() {
   async function loadOwner(token: string, preferredShopId?: string) {
     const [{ data: summaryData, error: summaryError }, { data: shopsData, error: shopsError }] =
       await Promise.all([
-        supabase.rpc('owner_summary', { p_token: token }),
-        supabase.rpc('list_shops', { p_token: token }),
+        getSupabaseClient().rpc('owner_summary', { p_token: token }),
+        getSupabaseClient().rpc('list_shops', { p_token: token }),
       ]);
 
     const summary = getRpcData<Record<string, unknown>>(summaryData, summaryError);
@@ -226,7 +236,7 @@ export default function Home() {
   }
 
   async function loadOwnerSummary(token: string) {
-    const { data, error } = await supabase.rpc('owner_summary', { p_token: token });
+    const { data, error } = await getSupabaseClient().rpc('owner_summary', { p_token: token });
     const summary = getRpcData<Record<string, unknown>>(data, error);
     setOwnerSummary({
       shopCount: toNumber(summary.shopCount),
@@ -238,7 +248,7 @@ export default function Home() {
   }
 
   async function loadShop(token: string, shopId: string) {
-    const { data, error } = await supabase.rpc('get_shop_dashboard', {
+    const { data, error } = await getSupabaseClient().rpc('get_shop_dashboard', {
       p_token: token,
       p_shop_id: shopId,
     });
@@ -269,7 +279,7 @@ export default function Home() {
 
     try {
       setIsBusy(true);
-      const { data, error } = await supabase.rpc('login_user', {
+      const { data, error } = await getSupabaseClient().rpc('login_user', {
         p_username: username,
         p_password: password,
       });
@@ -292,7 +302,7 @@ export default function Home() {
 
   async function handleLogout() {
     if (session?.token) {
-      await supabase.rpc('logout_user', { p_token: session.token });
+      await getSupabaseClient().rpc('logout_user', { p_token: session.token });
     }
     setSession(null);
     setDashboard(null);
@@ -314,7 +324,7 @@ export default function Home() {
 
     try {
       setIsBusy(true);
-      const { data, error } = await supabase.rpc('create_shop', {
+      const { data, error } = await getSupabaseClient().rpc('create_shop', {
         p_token: session.token,
         p_name: name,
         p_area: String(form.get('area') || 'Pune').trim() || 'Pune',
@@ -340,7 +350,7 @@ export default function Home() {
     const password = generatePassword();
     try {
       setIsBusy(true);
-      const { data, error } = await supabase.rpc('reset_shop_password', {
+      const { data, error } = await getSupabaseClient().rpc('reset_shop_password', {
         p_token: session.token,
         p_shop_id: shopId,
         p_password: password,
@@ -365,7 +375,7 @@ export default function Home() {
 
     try {
       setIsBusy(true);
-      const { data, error } = await supabase.rpc('add_item', {
+      const { data, error } = await getSupabaseClient().rpc('add_item', {
         p_token: session.token,
         p_shop_id: dashboard.shop.id,
         p_name: name,
@@ -407,7 +417,7 @@ export default function Home() {
     const form = new FormData(event.currentTarget);
     try {
       setIsBusy(true);
-      const { data, error } = await supabase.rpc('record_sale', {
+      const { data, error } = await getSupabaseClient().rpc('record_sale', {
         p_token: session.token,
         p_shop_id: dashboard.shop.id,
         p_item_id: selectedItem.id,
@@ -443,7 +453,7 @@ export default function Home() {
 
     try {
       setIsBusy(true);
-      const { data, error } = await supabase.rpc('update_stock', {
+      const { data, error } = await getSupabaseClient().rpc('update_stock', {
         p_token: session.token,
         p_item_id: itemId,
         p_stock: stock,
