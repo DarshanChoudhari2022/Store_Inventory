@@ -2,7 +2,7 @@
 
 ## 1. Product Summary
 
-Tapri Inventory Manager is a lightweight admin dashboard for a small Pune shop owner who sells cigarettes, Vimal, pan masala, lighters, tea counter add-ons, and other custom items. The owner can maintain a live item list, record sold products at the actual sale price, update closing stock at the end of each day, and view simple sales, profit, and stock analysis.
+Tapri Inventory Manager is a lightweight admin dashboard for a Pune small-shop owner who manages one or more tapris. The owner can create shop accounts, generate usernames and passwords for each shop, maintain shop-wise item lists, record sold products at the actual sale price, update closing stock at the end of each day, and view sales, profit, and stock analysis.
 
 ## 2. Problem
 
@@ -16,6 +16,9 @@ Small shop owners often track stock mentally or in a notebook. This creates four
 ## 3. Goals
 
 - Let the admin add any item sold at the shop.
+- Let the owner admin add multiple shops.
+- Generate username and password credentials for each shop.
+- Keep each shop's inventory, sales, and reports separate.
 - Track total quantity available for each item.
 - Record sales with quantity and actual sold price.
 - Calculate revenue, profit, units sold, stock value, and highest selling product.
@@ -27,23 +30,37 @@ Small shop owners often track stock mentally or in a notebook. This creates four
 
 - GST billing, tax filing, or invoice printing.
 - Supplier payment management.
-- Multi-branch inventory.
+- Enterprise multi-branch accounting.
 - Customer loyalty or credit ledger.
 - Real payment integration.
 
 ## 5. Primary User
 
-The first user is a tapri/store admin in Pune. He may not want complex software and may operate from a phone or a small laptop. He needs fast item entry, simple numbers, and confidence at day end.
+The first user is a tapri owner/admin in Pune who may operate multiple counters. He needs to add shops, give each shop a simple login, and still see combined owner-level performance. Shop staff need a focused shop dashboard for daily sales and closing stock.
 
 ## 6. Core Workflows
 
-### Admin Login
+### Owner Admin Login
 
-- Admin opens the app.
-- Enters username/mobile and password.
-- Lands on dashboard.
+- Owner opens the app.
+- Enters owner username and password.
+- Lands on owner admin dashboard.
 
 V1 prototype uses local login only. Production should use mobile OTP or password authentication.
+
+### Add Shop And Generate Credentials
+
+- Owner enters shop name and area.
+- App creates a shop record.
+- App generates a username and password for that shop.
+- Owner can share the credentials with the shop user.
+- Owner can reset a shop password later.
+
+### Shop Login
+
+- Shop user enters generated username and password.
+- Shop user lands on only that shop's dashboard.
+- Shop inventory, sales, profit, and closing stock are scoped to that shop.
 
 ### Add Item
 
@@ -65,6 +82,7 @@ V1 prototype uses local login only. Production should use mobile OTP or password
 ### Dashboard Review
 
 - Admin sees today's revenue, profit, units sold, stock value, highest selling item, low stock alerts, and daily sales log.
+- Owner sees total shops, combined revenue, combined profit, total stock value, and low-stock count across shops.
 
 ## 7. Useful Feature Brainstorm
 
@@ -79,6 +97,9 @@ V1 prototype uses local login only. Production should use mobile OTP or password
 - Barcode scan for packaged products.
 - Offline-first mode with cloud sync later.
 - Owner PIN for profit numbers, while helper can only enter sales.
+- Shop user permissions, so staff can update sales/stock but cannot see other shops.
+- Credential expiry and forced password reset after first login.
+- Shop-wise comparison: which tapri has better sales and margins.
 - Price change history to understand margin changes.
 - Spoilage/damage entry for broken packs or unusable stock.
 - Daily cash tally: opening cash, sales cash, expenses, closing cash.
@@ -97,6 +118,11 @@ V1 prototype uses local login only. Production should use mobile OTP or password
 Included in current prototype:
 
 - Admin login screen.
+- Owner admin login.
+- Multiple shop creation.
+- Generated shop username and password.
+- Shop password reset.
+- Shop-scoped login and dashboard.
 - Inventory list seeded with common tapri items.
 - Add custom item form.
 - Record sale form with actual sold price.
@@ -110,5 +136,6 @@ Production next step:
 
 - Real backend database.
 - Secure authentication.
+- Password hashing and role permissions.
 - Daily reports by date range.
 - Data export and backup.

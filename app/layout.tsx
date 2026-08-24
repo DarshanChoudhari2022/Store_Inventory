@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: 'Tapri Inventory Manager',
   description:
-    'A small-shop inventory, daily sales, profit, and closing stock dashboard for a Pune tapri admin.',
+    'A multi-shop inventory, daily sales, profit, generated login, and closing stock dashboard for Pune tapri admins.',
 };
 
 export default function RootLayout({

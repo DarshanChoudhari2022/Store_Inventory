@@ -2,7 +2,7 @@
 
 ## Current Implementation
 
-The prototype is a Vinext/React app created with the OpenAI Sites scaffold.
+The prototype is a Vinext/React app created with the OpenAI Sites scaffold. It now supports an owner admin account plus generated shop accounts.
 
 Key files:
 
@@ -42,11 +42,34 @@ type Sale = {
 };
 ```
 
+### Shop
+
+```ts
+type Shop = {
+  id: string;
+  name: string;
+  area: string;
+  username: string;
+  password: string;
+  items: Item[];
+  sales: Sale[];
+};
+```
+
+### Session
+
+```ts
+type Session = {
+  role: 'owner' | 'shop';
+  shopId?: string;
+};
+```
+
 ## Storage
 
-V1 stores items and sales in browser local storage under `tapri-inventory-v1`.
+V1 stores shops, items, sales, and generated credentials in browser local storage under `tapri-inventory-v2`.
 
-This makes the prototype easy to test immediately, but it is not enough for production because data is tied to one browser/device.
+This makes the prototype easy to test immediately, but it is not enough for production because data is tied to one browser/device and passwords are visible in local storage.
 
 ## Dashboard Calculations
 
@@ -57,6 +80,22 @@ This makes the prototype easy to test immediately, but it is not enough for prod
 - Highest seller: item with the highest units sold today.
 - Low stock: items where `stock <= reorderLevel`.
 
+Owner-level calculations aggregate today's sales and inventory value across all shops.
+
+## Authentication Behavior
+
+Prototype credentials:
+
+- Owner: `owner` / `owner123`
+- Seed shop: `fcroad.admin` / `Tapri@4217`
+
+When the owner creates a new shop, the app generates:
+
+- Username: normalized shop slug plus `.admin`
+- Password: `Tapri@` plus a random four-digit number
+
+This is for product demonstration only. Production must never store plaintext passwords.
+
 ## Production Architecture Recommendation
 
 For a real deployment:
@@ -66,7 +105,8 @@ For a real deployment:
 - Database: SQLite/D1 or Postgres.
 - Auth: mobile OTP or password login.
 - Storage tables:
-  - `users`
+- `users`
+  - `shops`
   - `items`
   - `sales`
   - `stock_adjustments`
@@ -82,6 +122,7 @@ For a real deployment:
 
 - Prototype login is only a UI gate.
 - Production must hash passwords or use OTP auth.
+- Generated shop passwords should be temporary and reset on first login.
 - Profit dashboard should require owner role.
 - Helper role should be limited to sale entry and stock count.
 
@@ -90,6 +131,10 @@ For a real deployment:
 Manual MVP checks:
 
 - Login opens dashboard.
+- Owner can create a new shop.
+- New shop receives generated username and password.
+- Generated shop credentials can be used to log in.
+- Shop login sees only that shop's inventory.
 - Add item persists after page refresh.
 - Record sale reduces stock.
 - Sale at custom price changes profit correctly.

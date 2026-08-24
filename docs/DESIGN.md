@@ -2,13 +2,19 @@
 
 ## Product Shape
 
-This is an operational dashboard, not a landing page. The first screen after login focuses on the numbers a shop admin needs while working: today's sales, profit, units sold, stock value, highest seller, inventory, sale entry, and low-stock analysis.
+This is an operational dashboard, not a landing page. The first screen after owner login focuses on shop management and combined business health. The shop dashboard focuses on the numbers a shop admin needs while working: today's sales, profit, units sold, stock value, highest seller, inventory, sale entry, and low-stock analysis.
 
 ## Information Architecture
 
 - Login
-  - Admin identity fields.
+  - Owner or shop identity fields.
   - Prototype note for local-only authentication.
+- Owner Admin
+  - Combined KPIs.
+  - Shop account table.
+  - Add shop form.
+  - Generated username and password visibility.
+  - Selected shop management.
 - Dashboard
   - KPI strip.
   - Inventory table.
@@ -42,6 +48,14 @@ The sale form keeps the most common workflow compact:
 
 The sold price is editable because tapri pricing can vary by customer, loose item, pack, or time.
 
+### Shop Account Creation
+
+The owner admin can create a shop with just shop name and area. The system generates a practical username from the shop name and a password with a clear `Tapri@0000` pattern for demo use. Production should generate stronger one-time passwords and force reset on first login.
+
+### Shop Switching
+
+The owner can view and manage any shop from a selector. Shop users do not see the selector and only land in their assigned shop dashboard.
+
 ### Closing Stock
 
 Each inventory row has an editable closing count. The owner can physically count items at night and correct the stock directly without opening another page.
@@ -70,4 +84,5 @@ Items at or below their reorder level are flagged in the table and repeated in a
 - Add Marathi/Hindi language toggle.
 - Add a closing-day checklist.
 - Add role-specific views for owner and helper.
+- Add credential copy buttons and first-login password reset.
 - Add printable or WhatsApp-friendly reports.
