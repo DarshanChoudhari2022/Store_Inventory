@@ -888,21 +888,35 @@ function ShopDashboard({
   updateClosingCount: (itemId: string, stock: number) => void;
 }) {
   const [query, setQuery] = useState('');
-  const [sortMode, setSortMode] = useState<'name' | 'stock' | 'price' | 'performance'>('name');
-  const [showOnlyActive, setShowOnlyActive] = useState(false);
-  const [visibleItems, setVisibleItems] = useState<Record<string, boolean>>({});
+  const [sortMode, setSortMode] = useState<'name' | 'stock' | 'sold' | 'profit' | 'restock'>('restock');
+  const [categoryFilter, setCategoryFilter] = useState('All Product');
+  const [showOnlyRestock, setShowOnlyRestock] = useState(false);
+  const salesByItem = useMemo(() => {
+    return metrics.todaysSales.reduce<Record<string, { qty: number; revenue: number; profit: number }>>((acc, sale) => {
+      const key = sale.itemId ?? sale.itemName;
+      acc[key] = acc[key] ?? { qty: 0, revenue: 0, profit: 0 };
+      acc[key].qty += sale.qty;
+      acc[key].revenue += sale.qty * sale.soldPrice;
+      acc[key].profit += sale.qty * (sale.soldPrice - sale.buyingPrice);
+      return acc;
+    }, {});
+  }, [metrics.todaysSales]);
   const filteredItems = useMemo(() => {
     return dashboard.items
       .filter((item) => item.name.toLowerCase().includes(query.toLowerCase()))
-      .filter((item) => (showOnlyActive ? visibleItems[item.id] !== false : true))
+      .filter((item) => (categoryFilter === 'All Product' ? true : item.category === categoryFilter))
+      .filter((item) => (showOnlyRestock ? item.stock <= item.reorderLevel : true))
       .sort((a, b) => {
         if (sortMode === 'stock') return b.stock - a.stock;
-        if (sortMode === 'price') return b.defaultSellingPrice - a.defaultSellingPrice;
-        if (sortMode === 'performance') return itemScore(b) - itemScore(a);
+        if (sortMode === 'sold') return (salesByItem[b.id]?.qty ?? 0) - (salesByItem[a.id]?.qty ?? 0);
+        if (sortMode === 'profit') return (salesByItem[b.id]?.profit ?? 0) - (salesByItem[a.id]?.profit ?? 0);
+        if (sortMode === 'restock') return restockPriority(b) - restockPriority(a);
         return a.name.localeCompare(b.name);
       });
-  }, [dashboard.items, query, showOnlyActive, sortMode, visibleItems]);
-  const winningItem = [...dashboard.items].sort((a, b) => itemScore(b) - itemScore(a))[0];
+  }, [categoryFilter, dashboard.items, query, salesByItem, showOnlyRestock, sortMode]);
+  const winningItem = [...dashboard.items].sort((a, b) => (salesByItem[b.id]?.qty ?? 0) - (salesByItem[a.id]?.qty ?? 0))[0];
+  const stockValue = dashboard.items.reduce((sum, item) => sum + item.stock * item.buyingPrice, 0);
+  const categories = ['All Product', ...Array.from(new Set(dashboard.items.map((item) => item.category)))];
 
   return (
     <>
@@ -910,35 +924,35 @@ function ShopDashboard({
         <aside className="commerce-sidebar">
           <div className="side-brand">
             <span className="status-dot" />
-            <p>Performance</p>
+            <p>Store Control</p>
           </div>
-          <div className="side-link">⌁ <span>Analytics</span></div>
-          <div className="side-link">♧ <span>Notification</span><b>99+</b></div>
-          <div className="side-link active">◎ <span>Performance</span></div>
-          <div className="side-link">▥ <span>Orders</span><em>120</em></div>
+          <button type="button" className="side-link" onClick={() => setSortMode('sold')}>⌁ <span>Today Sales</span></button>
+          <button type="button" className="side-link" onClick={() => setShowOnlyRestock(true)}>♧ <span>Low Stock</span><b>{metrics.lowStock.length}</b></button>
+          <button type="button" className="side-link active" onClick={() => setSortMode('restock')}>◎ <span>Restock Priority</span></button>
+          <button type="button" className="side-link" onClick={() => setSortMode('profit')}>▥ <span>Profit</span><em>{money(metrics.profit)}</em></button>
           <p className="side-title">PRODUCT</p>
-          <button type="button" className="side-link selected" onClick={() => setQuery('')}>▰ <span>All Product</span></button>
-          <button type="button" className="side-link" onClick={() => setSortMode('stock')}>♨ <span>Shipping</span></button>
-          <button type="button" className="side-link" onClick={() => setSortMode('performance')}>◌ <span>Campaign</span></button>
+          <button type="button" className="side-link selected" onClick={() => { setCategoryFilter('All Product'); setShowOnlyRestock(false); }}>▰ <span>All Inventory</span></button>
+          <button type="button" className="side-link" onClick={() => setSortMode('stock')}>♨ <span>Stock Count</span></button>
+          <button type="button" className="side-link" onClick={() => setSortMode('sold')}>◌ <span>Fast Moving</span></button>
           <button type="button" className="side-link" onClick={() => setSortMode('name')}>◇ <span>Catalog</span></button>
           <p className="side-title">MY STORE</p>
           <div className="category-block">
             <div className="category-heading">▧ Product Category <span>⌃</span></div>
-            {['Cigarettes', 'Pan Masala', 'Accessories'].map((name, index) => (
-              <button key={name} type="button" onClick={() => setQuery(name === 'Accessories' ? 'Lighter' : '')}>
+            {categories.slice(1).map((name, index) => (
+              <button key={name} type="button" onClick={() => setCategoryFilter(name)}>
                 <i style={{ background: ['#ff5555', '#4968ff', '#23b44d'][index] }} />
                 {name}
-                <b>• {dashboard.items.filter((item) => item.category === name).length || 120}</b>
+                <b>• {dashboard.items.filter((item) => item.category === name).length}</b>
               </button>
             ))}
           </div>
-          <div className="side-link">♧ <span>Finance</span></div>
-          <div className="side-link">♙ <span>Customer</span></div>
+          <button type="button" className="side-link" onClick={() => setSortMode('profit')}>♧ <span>Finance</span></button>
+          <button type="button" className="side-link" onClick={() => setShowOnlyRestock(false)}>♙ <span>Daily Closing</span></button>
         </aside>
 
         <section className="commerce-main">
           <header className="commerce-topbar">
-            <h2>All Product List</h2>
+            <h2>Inventory Control</h2>
             <label className="commerce-search">
               <span>⌕</span>
               <input
@@ -950,32 +964,34 @@ function ShopDashboard({
             </label>
             <select
               value={sortMode}
-              onChange={(event) => setSortMode(event.target.value as 'name' | 'stock' | 'price' | 'performance')}
+              onChange={(event) => setSortMode(event.target.value as 'name' | 'stock' | 'sold' | 'profit' | 'restock')}
               aria-label="Sort products"
             >
-              <option value="name">Sort By</option>
+              <option value="restock">Restock</option>
               <option value="stock">Stock</option>
-              <option value="price">Price</option>
-              <option value="performance">Performance</option>
+              <option value="sold">Sold Today</option>
+              <option value="profit">Profit</option>
+              <option value="name">Name</option>
             </select>
-            <button type="button" onClick={() => setShowOnlyActive((value) => !value)}>
-              ▣ Show All Product <span>{dashboard.items.length + 115}</span>
+            <button type="button" onClick={() => setShowOnlyRestock((value) => !value)}>
+              ▣ {showOnlyRestock ? 'Show All Items' : 'Needs Restock'} <span>{metrics.lowStock.length}</span>
             </button>
           </header>
 
           <section className="commerce-stats">
-            <h3>Product Statistic</h3>
+            <h3>Store Snapshot</h3>
             <div>
-              <CommerceStat label="Active Product" value={String(dashboard.items.length + 347)} suffix="Product" />
-              <CommerceStat label="Winning Product" value={`▰ ${winningItem?.name ?? 'No item'} ...`} />
-              <CommerceStat label="Average Performance" value="Good!" gauge />
-              <CommerceStat label="Product Sold" value={String(metrics.units || 12340)} suffix="Items" />
+              <CommerceStat label="Inventory Items" value={String(dashboard.items.length)} suffix="Products" />
+              <CommerceStat label="Stock Value" value={money(stockValue)} />
+              <CommerceStat label="Low Stock" value={String(metrics.lowStock.length)} suffix="Items" gauge={metrics.lowStock.length > 0} />
+              <CommerceStat label="Highest Seller" value={metrics.topSeller === 'No sales yet' ? winningItem?.name ?? 'No item' : metrics.topSeller} />
             </div>
           </section>
 
           <div className="commerce-products">
             {filteredItems.map((item) => {
-              const performance = itemPerformance(item);
+              const saleStats = salesByItem[item.id] ?? salesByItem[item.name] ?? { qty: 0, revenue: 0, profit: 0 };
+              const restock = item.stock <= item.reorderLevel;
               return (
                 <article key={item.id} className="commerce-row">
                   <div className="commerce-product">
@@ -987,42 +1003,38 @@ function ShopDashboard({
                   </div>
                   <span className="row-line" />
                   <div className="commerce-performance">
-                    <p>Performance <span>{performance}</span></p>
+                    <p>Sold Today <span>{saleStats.qty} pcs</span></p>
                     <div>
-                      <span>⌁ {Math.max(71, item.stock * 4)}</span>
-                      <span>▢ 12,4k</span>
+                      <span>Revenue {money(saleStats.revenue)}</span>
+                      <span>Profit {money(saleStats.profit)}</span>
                     </div>
                   </div>
-                  <MiniGauge value={itemScore(item)} />
+                  <MiniGauge value={restock ? 24 : Math.min(88, 45 + item.stock)} />
                   <span className="row-line" />
                   <div className="commerce-info">
                     <p>Stock</p>
-                    <span>◇ {item.stock}</span>
+                    <span>◇ {item.stock} pcs</span>
                   </div>
                   <span className="row-line" />
                   <div className="commerce-info">
-                    <p>Product Price</p>
-                    <span>$ {item.defaultSellingPrice ? `${item.defaultSellingPrice}.00 USD` : 'Custom'}</span>
+                    <p>Sell / Buy</p>
+                    <span>{money(item.defaultSellingPrice)} / {money(item.buyingPrice)}</span>
                   </div>
                   <div className="commerce-visible">
-                    <p>Visibility</p>
-                    <button
-                      type="button"
-                      className={visibleItems[item.id] === false ? 'switch' : 'switch on'}
-                      onClick={() =>
-                        setVisibleItems((current) => ({ ...current, [item.id]: current[item.id] === false }))
-                      }
-                      aria-label={`Toggle visibility for ${item.name}`}
-                    />
+                    <p>Restock</p>
+                    <span className={restock ? 'restock-pill alert' : 'restock-pill'}>{restock ? 'Needed' : 'OK'}</span>
                   </div>
                   <div className="commerce-actions">
-                    <button
-                      type="button"
-                      aria-label={`Update closing count for ${item.name}`}
-                      onClick={() => void updateClosingCount(item.id, item.stock)}
-                    >
-                      ⌁
-                    </button>
+                    <input
+                      aria-label={`Closing count for ${item.name}`}
+                      type="number"
+                      min="0"
+                      defaultValue={item.stock}
+                      onBlur={(event) => {
+                        const nextStock = Number(event.target.value);
+                        if (nextStock !== item.stock) void updateClosingCount(item.id, nextStock);
+                      }}
+                    />
                     <button type="button" aria-label={`Select ${item.name}`} onClick={() => setSelectedItemId(item.id)}>
                       ◉
                     </button>
@@ -1180,6 +1192,11 @@ function itemScore(item: Item) {
   if (item.stock <= item.reorderLevel) return 26;
   if (item.stock > item.reorderLevel * 4) return 84;
   return 62;
+}
+
+function restockPriority(item: Item) {
+  if (item.stock <= item.reorderLevel) return 1000 + (item.reorderLevel - item.stock);
+  return Math.max(0, item.reorderLevel * 4 - item.stock);
 }
 
 const Metric = memo(function Metric({ label, value }: { label: string; value: string }) {

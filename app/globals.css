@@ -590,7 +590,7 @@ tbody tr:hover {
 
 .commerce-row {
   display: grid;
-  grid-template-columns: 230px 1px 160px 86px 1px 92px 1px 136px 88px 88px;
+  grid-template-columns: 220px 1px 210px 80px 1px 92px 1px 150px 90px 120px;
   align-items: center;
   min-height: 76px;
   border-bottom: 1px solid #eeeeee;
@@ -664,6 +664,25 @@ tbody tr:hover {
   justify-self: center;
 }
 
+.restock-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 58px;
+  height: 24px;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: #e4f3e8;
+  color: #246b4b;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.restock-pill.alert {
+  background: #fff1df;
+  color: #9a3412;
+}
+
 .switch {
   display: block;
   width: 31px;
@@ -696,6 +715,17 @@ tbody tr:hover {
   display: flex;
   gap: 9px;
   align-items: center;
+}
+
+.commerce-actions input {
+  width: 56px;
+  height: 32px;
+  border: 1px solid #d8d0c1;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 0 8px;
+  color: #111111;
+  font-size: 13px;
 }
 
 .commerce-actions button {
@@ -814,7 +844,7 @@ tbody tr:hover {
   }
 
   .commerce-row {
-    grid-template-columns: 190px 1px 130px 70px 1px 74px 1px 112px 70px 58px;
+    grid-template-columns: 190px 1px 180px 70px 1px 86px 1px 130px 78px 110px;
     column-gap: 10px;
   }
 
