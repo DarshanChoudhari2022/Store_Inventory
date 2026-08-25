@@ -1,915 +1,1137 @@
 'use client';
 
-import type { CSSProperties, FormEvent, ReactNode } from 'react';
-import { useMemo, useState } from 'react';
+import { createClient } from '@supabase/supabase-js';
+import { FormEvent, memo, useEffect, useMemo, useState } from 'react';
 
-type Product = {
-  id: number;
+type Item = {
+  id: string;
   name: string;
-  image: string;
-  review: string;
-  performance: 'Excellent' | 'Good' | 'Bad';
-  views: number;
-  sales: number;
-  score: number;
-  stock: number;
-  price: string;
   category: string;
-  sku: string;
-  material: string;
-  visible: boolean;
+  buyingPrice: number;
+  defaultSellingPrice: number;
+  stock: number;
+  reorderLevel: number;
 };
 
-type SortMode = 'name' | 'stock' | 'performance' | 'price';
+type Sale = {
+  id: string;
+  itemId: string | null;
+  itemName: string;
+  qty: number;
+  buyingPrice: number;
+  soldPrice: number;
+  date: string;
+};
 
-const initialProducts: Product[] = [
-  {
-    id: 1,
-    name: '4 Tier Shelving',
-    image: 'shelf',
-    review: '4,5',
-    performance: 'Excellent',
-    views: 994,
-    sales: 12400,
-    score: 88,
-    stock: 92,
-    price: 'Custom',
-    category: 'Desk Setup',
-    sku: 'STR-SHEL-2001',
-    material: 'Wood & Steel',
-    visible: true,
-  },
-  {
-    id: 2,
-    name: 'Insence Holder',
-    image: 'holder',
-    review: '4,5',
-    performance: 'Good',
-    views: 123,
-    sales: 12400,
-    score: 61,
-    stock: 594,
-    price: '66.00 USD',
-    category: 'Decoration Lamp',
-    sku: 'STR-INCN-4B11',
-    material: 'Steel',
-    visible: true,
-  },
-  {
-    id: 3,
-    name: 'Ashtray',
-    image: 'ashtray',
-    review: '4,5',
-    performance: 'Good',
-    views: 637,
-    sales: 12400,
-    score: 78,
-    stock: 362,
-    price: '81.00 USD',
-    category: 'Desk Setup',
-    sku: 'STR-ASH-7841',
-    material: 'Ceramic',
-    visible: false,
-  },
-  {
-    id: 4,
-    name: 'Coffee Table',
-    image: 'table',
-    review: '4,5',
-    performance: 'Excellent',
-    views: 148,
-    sales: 12400,
-    score: 86,
-    stock: 746,
-    price: 'Custom',
-    category: 'Desk Setup',
-    sku: 'STR-TABL-8890',
-    material: 'Aluminium',
-    visible: false,
-  },
-  {
-    id: 5,
-    name: '3 Seater Sofa',
-    image: 'sofa',
-    review: '4,5',
-    performance: 'Bad',
-    views: 817,
-    sales: 12400,
-    score: 24,
-    stock: 909,
-    price: 'Custom',
-    category: 'Man Fashion',
-    sku: 'STR-SOFA-9093',
-    material: 'Fabric',
-    visible: true,
-  },
-  {
-    id: 6,
-    name: 'Candle Holder',
-    image: 'candle',
-    review: '4,5',
-    performance: 'Bad',
-    views: 926,
-    sales: 12400,
-    score: 38,
-    stock: 333,
-    price: '50.00 USD',
-    category: 'Decoration Lamp',
-    sku: 'STR-CNDL-5510',
-    material: 'Steel',
-    visible: true,
-  },
-  {
-    id: 7,
-    name: 'Table Lamp',
-    image: 'lamp',
-    review: '4,5',
-    performance: 'Good',
-    views: 43000,
-    sales: 1200,
-    score: 73,
-    stock: 310,
-    price: '318.00 USD',
-    category: 'Decoration Lamp',
-    sku: 'STR-D343-4BFE',
-    material: 'Stainless Steel',
-    visible: true,
-  },
-  {
-    id: 8,
-    name: 'Laptop Stand',
-    image: 'shelf',
-    review: '4,4',
-    performance: 'Excellent',
-    views: 328,
-    sales: 980,
-    score: 83,
-    stock: 220,
-    price: '92.00 USD',
-    category: 'Laptop & Device',
-    sku: 'STR-LSTD-2240',
-    material: 'Aluminium',
-    visible: true,
-  },
-  {
-    id: 9,
-    name: 'Monitor Riser',
-    image: 'table',
-    review: '4,6',
-    performance: 'Good',
-    views: 502,
-    sales: 1410,
-    score: 69,
-    stock: 145,
-    price: '115.00 USD',
-    category: 'Laptop & Device',
-    sku: 'STR-MRSE-8112',
-    material: 'Wood',
-    visible: false,
-  },
-];
+type ShopAccount = {
+  id: string;
+  name: string;
+  area: string;
+  username: string;
+  itemCount: number;
+};
 
-const categories = [
-  { name: 'Man Fashion', count: '120', color: '#ff4b4b' },
-  { name: 'Laptop & Device', count: '120', color: '#4968ff' },
-  { name: 'Desk Setup', count: '120', color: '#21b54a' },
-];
+type ShopProfile = {
+  id: string;
+  name: string;
+  area: string;
+  username: string;
+};
 
-const pageSize = 7;
+type ShopDashboardData = {
+  shop: ShopProfile;
+  items: Item[];
+  todaysSales: Sale[];
+};
+
+type OwnerSummary = {
+  shopCount: number;
+  revenue: number;
+  profit: number;
+  inventoryValue: number;
+  lowStockCount: number;
+};
+
+type Session = {
+  token: string;
+  role: 'owner' | 'shop';
+  shopId?: string;
+};
+
+type CredentialNote = {
+  username: string;
+  password: string;
+  label: string;
+};
+
+type Lang = 'en' | 'mr';
+
+const dictionary = {
+  en: {
+    appName: 'Store Inventory Management',
+    eyebrow: 'Store stock desk',
+    heroTitle: 'Multi-store inventory backed by Supabase',
+    heroCopy:
+      "Owner admin can create shops, generate usernames and passwords, then track each shop's items, stock, daily sales, profit, and fast moving products separately.",
+    shopLogins: 'Shop logins',
+    cloudData: 'Cloud data',
+    profitView: 'Profit view',
+    adminLogin: 'Admin login',
+    username: 'Username',
+    password: 'Password',
+    openDashboard: 'Open dashboard',
+    opening: 'Opening...',
+    loginHint: 'Use your owner or shop credentials. Ask the owner admin to reset a shop password if needed.',
+    configMissing:
+      'Supabase is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in Vercel.',
+    ownerDashboard: 'Owner Admin Dashboard',
+    shopAccounts: 'Shop accounts',
+    credentialsHint: 'Credentials are revealed only when generated or reset',
+    addNewShop: 'Add new shop',
+    shopName: 'Shop name',
+    area: 'Area',
+    generateLogin: 'Generate shop login',
+    newShopHint: 'New stores start with the standard inventory item list. Copy credentials when they appear here.',
+    manageShop: 'Manage selected shop',
+    selectedShop: 'Selected shop',
+    totalShops: 'Total shops',
+    todaySales: 'Today sales',
+    todayProfit: 'Today profit',
+    stockValue: 'Stock value',
+    lowStockItems: 'Low stock items',
+    unitsSold: 'Units sold',
+    highestSeller: 'Highest seller',
+    availableItems: 'Available shop items',
+    activeItems: 'active items',
+    item: 'Item',
+    category: 'Category',
+    buy: 'Buy',
+    sell: 'Sell',
+    stock: 'Stock',
+    closingCount: 'Closing count',
+    status: 'Status',
+    restock: 'Restock',
+    ok: 'OK',
+    recordSold: 'Record sold product',
+    product: 'Product',
+    qtySold: 'Qty sold',
+    soldPrice: 'Sold price per pc',
+    saveSale: 'Save sale',
+    addItem: 'Add custom shop item',
+    itemName: 'Item name',
+    buyingPrice: 'Buying price',
+    sellingPrice: 'Selling price',
+    totalQty: 'Total qty',
+    restockAlert: 'Restock alert',
+    addItemAction: 'Add item',
+    lowStockAnalysis: 'Low stock analysis',
+    noLowStock: 'No low stock items today.',
+    todaySalesLog: 'Today sales log',
+    noSales: 'Sales added today will appear here.',
+    loading: 'Loading shop data...',
+    syncing: 'Syncing...',
+    logout: 'Logout',
+    view: 'View',
+    reset: 'Reset',
+    copy: 'Copy',
+    copied: 'Copied',
+    generatedCredential: 'Generated credential',
+  },
+  mr: {
+    appName: 'स्टोअर इन्व्हेंटरी व्यवस्थापन',
+    eyebrow: 'स्टोअर स्टॉक डेस्क',
+    heroTitle: 'Supabase सह मल्टी-स्टोअर इन्व्हेंटरी',
+    heroCopy:
+      'मालक अॅडमिन दुकाने तयार करू शकतो, युजरनेम आणि पासवर्ड जनरेट करू शकतो, आणि प्रत्येक दुकानाचा स्टॉक, विक्री, नफा आणि जलद विकली जाणारी उत्पादने वेगळी पाहू शकतो.',
+    shopLogins: 'दुकान लॉगिन',
+    cloudData: 'क्लाउड डेटा',
+    profitView: 'नफा दृश्य',
+    adminLogin: 'अॅडमिन लॉगिन',
+    username: 'युजरनेम',
+    password: 'पासवर्ड',
+    openDashboard: 'डॅशबोर्ड उघडा',
+    opening: 'उघडत आहे...',
+    loginHint: 'मालक किंवा दुकान क्रेडेन्शियल्स वापरा. गरज असल्यास मालक अॅडमिनकडून दुकान पासवर्ड रीसेट करा.',
+    configMissing:
+      'Supabase कॉन्फिगर केलेले नाही. Vercel मध्ये NEXT_PUBLIC_SUPABASE_URL आणि NEXT_PUBLIC_SUPABASE_ANON_KEY जोडा.',
+    ownerDashboard: 'मालक अॅडमिन डॅशबोर्ड',
+    shopAccounts: 'दुकान खाती',
+    credentialsHint: 'क्रेडेन्शियल्स फक्त तयार किंवा रीसेट केल्यावर दिसतील',
+    addNewShop: 'नवीन दुकान जोडा',
+    shopName: 'दुकानाचे नाव',
+    area: 'एरिया',
+    generateLogin: 'दुकान लॉगिन जनरेट करा',
+    newShopHint: 'नवीन दुकानांना स्टँडर्ड इन्व्हेंटरी यादी मिळेल. क्रेडेन्शियल्स दिसल्यावर कॉपी करा.',
+    manageShop: 'निवडलेले दुकान व्यवस्थापित करा',
+    selectedShop: 'निवडलेले दुकान',
+    totalShops: 'एकूण दुकाने',
+    todaySales: 'आजची विक्री',
+    todayProfit: 'आजचा नफा',
+    stockValue: 'स्टॉक मूल्य',
+    lowStockItems: 'कमी स्टॉक आयटम',
+    unitsSold: 'विकलेले युनिट्स',
+    highestSeller: 'सर्वाधिक विक्री',
+    availableItems: 'उपलब्ध दुकान आयटम',
+    activeItems: 'सक्रिय आयटम',
+    item: 'आयटम',
+    category: 'कॅटेगरी',
+    buy: 'खरेदी',
+    sell: 'विक्री',
+    stock: 'स्टॉक',
+    closingCount: 'क्लोजिंग काउंट',
+    status: 'स्थिती',
+    restock: 'रीस्टॉक',
+    ok: 'ठीक',
+    recordSold: 'विकलेला प्रॉडक्ट नोंदवा',
+    product: 'प्रॉडक्ट',
+    qtySold: 'विकलेली संख्या',
+    soldPrice: 'प्रति पीस विक्री किंमत',
+    saveSale: 'विक्री सेव्ह करा',
+    addItem: 'कस्टम दुकान आयटम जोडा',
+    itemName: 'आयटम नाव',
+    buyingPrice: 'खरेदी किंमत',
+    sellingPrice: 'विक्री किंमत',
+    totalQty: 'एकूण संख्या',
+    restockAlert: 'रीस्टॉक अलर्ट',
+    addItemAction: 'आयटम जोडा',
+    lowStockAnalysis: 'कमी स्टॉक विश्लेषण',
+    noLowStock: 'आज कोणताही कमी स्टॉक आयटम नाही.',
+    todaySalesLog: 'आजची विक्री नोंद',
+    noSales: 'आज जोडलेली विक्री येथे दिसेल.',
+    loading: 'दुकान डेटा लोड होत आहे...',
+    syncing: 'सिंक होत आहे...',
+    logout: 'लॉगआउट',
+    view: 'पहा',
+    reset: 'रीसेट',
+    copy: 'कॉपी',
+    copied: 'कॉपी झाले',
+    generatedCredential: 'जनरेटेड क्रेडेन्शियल',
+  },
+} satisfies Record<Lang, Record<string, string>>;
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+const supabase = isSupabaseConfigured
+  ? createClient(supabaseUrl as string, supabaseAnonKey as string)
+  : null;
+
+const sessionKey = 'store-inventory-session-v1';
+
+const money = (value: number) => `Rs ${Math.round(value).toLocaleString('en-IN')}`;
+const numeric = (value: FormDataEntryValue | null) => Number(value || 0);
+const cleanSlug = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+
+function generatePassword() {
+  return `Store@${Math.floor(1000 + Math.random() * 9000)}`;
+}
+
+function toNumber(value: unknown) {
+  return Number(value ?? 0);
+}
+
+function mapItem(raw: Record<string, unknown>): Item {
+  return {
+    id: String(raw.id),
+    name: String(raw.name),
+    category: String(raw.category),
+    buyingPrice: toNumber(raw.buyingPrice),
+    defaultSellingPrice: toNumber(raw.defaultSellingPrice),
+    stock: toNumber(raw.stock),
+    reorderLevel: toNumber(raw.reorderLevel),
+  };
+}
+
+function mapSale(raw: Record<string, unknown>): Sale {
+  return {
+    id: String(raw.id),
+    itemId: raw.itemId ? String(raw.itemId) : null,
+    itemName: String(raw.itemName),
+    qty: toNumber(raw.qty),
+    buyingPrice: toNumber(raw.buyingPrice),
+    soldPrice: toNumber(raw.soldPrice),
+    date: String(raw.date),
+  };
+}
+
+function getRpcData<T>(data: T | null, error: { message?: string } | null) {
+  if (error) throw new Error(error.message || 'Supabase request failed');
+  if (data === null) throw new Error('Supabase returned no data');
+  return data;
+}
+
+function getSupabaseClient() {
+  if (!supabase) {
+    throw new Error('Supabase environment variables are missing.');
+  }
+
+  return supabase;
+}
 
 export default function Home() {
-  const [products, setProducts] = useState(initialProducts);
-  const [query, setQuery] = useState('');
-  const [sortMode, setSortMode] = useState<SortMode>('name');
-  const [showVisibleOnly, setShowVisibleOnly] = useState(false);
-  const [category, setCategory] = useState('All Product');
-  const [page, setPage] = useState(1);
-  const [selectedId, setSelectedId] = useState(7);
-  const [sortOpen, setSortOpen] = useState(false);
-  const [modal, setModal] = useState<'new' | 'edit' | 'view' | null>(null);
-  const [toast, setToast] = useState('Ready');
+  const [session, setSession] = useState<Session | null>(null);
+  const [shops, setShops] = useState<ShopAccount[]>([]);
+  const [ownerSummary, setOwnerSummary] = useState<OwnerSummary>({
+    shopCount: 0,
+    revenue: 0,
+    profit: 0,
+    inventoryValue: 0,
+    lowStockCount: 0,
+  });
+  const [dashboard, setDashboard] = useState<ShopDashboardData | null>(null);
+  const [selectedShopId, setSelectedShopId] = useState('');
+  const [selectedItemId, setSelectedItemId] = useState('');
+  const [message, setMessage] = useState('Ready for today');
+  const [credentialNote, setCredentialNote] = useState<CredentialNote | null>(null);
+  const [isBusy, setIsBusy] = useState(false);
+  const [lang, setLang] = useState<Lang>('en');
+  const copy = dictionary[lang];
 
-  const selectedProduct = products.find((product) => product.id === selectedId) ?? products[0];
+  useEffect(() => {
+    const saved = window.localStorage.getItem(sessionKey);
+    if (!saved) return;
 
-  const visibleProducts = useMemo(() => {
-    const performanceRank = { Excellent: 3, Good: 2, Bad: 1 };
-    return products
-      .filter((product) => product.name.toLowerCase().includes(query.toLowerCase()))
-      .filter((product) => (showVisibleOnly ? product.visible : true))
-      .filter((product) => (category === 'All Product' ? true : product.category === category))
-      .sort((a, b) => {
-        if (sortMode === 'stock') return b.stock - a.stock;
-        if (sortMode === 'performance') return performanceRank[b.performance] - performanceRank[a.performance];
-        if (sortMode === 'price') return priceValue(b.price) - priceValue(a.price);
-        return a.name.localeCompare(b.name);
-      });
-  }, [category, products, query, showVisibleOnly, sortMode]);
+    try {
+      const parsed = JSON.parse(saved) as Session;
+      setSession(parsed);
+      void loadAfterLogin(parsed);
+    } catch {
+      window.localStorage.removeItem(sessionKey);
+    }
+  }, []);
 
-  const totalPages = Math.max(1, Math.ceil(visibleProducts.length / pageSize));
-  const pageProducts = visibleProducts.slice((page - 1) * pageSize, page * pageSize);
+  const selectedItem = dashboard?.items.find((item) => item.id === selectedItemId) ?? dashboard?.items[0];
 
-  function toggleVisibility(id: number) {
-    setProducts((current) =>
-      current.map((product) =>
-        product.id === id ? { ...product, visible: !product.visible } : product,
-      ),
+  useEffect(() => {
+    if (!dashboard?.items.some((item) => item.id === selectedItemId)) {
+      setSelectedItemId(dashboard?.items[0]?.id ?? '');
+    }
+  }, [dashboard, selectedItemId]);
+
+  const metrics = useMemo(() => {
+    const items = dashboard?.items ?? [];
+    const todaysSales = dashboard?.todaysSales ?? [];
+    const revenue = todaysSales.reduce((sum, sale) => sum + sale.soldPrice * sale.qty, 0);
+    const profit = todaysSales.reduce(
+      (sum, sale) => sum + (sale.soldPrice - sale.buyingPrice) * sale.qty,
+      0,
     );
-    setToast('Visibility updated');
+    const units = todaysSales.reduce((sum, sale) => sum + sale.qty, 0);
+    const lowStock = items.filter((item) => item.stock <= item.reorderLevel);
+
+    const byProduct = todaysSales.reduce<Record<string, number>>((acc, sale) => {
+      acc[sale.itemName] = (acc[sale.itemName] ?? 0) + sale.qty;
+      return acc;
+    }, {});
+    const topSeller = Object.entries(byProduct).sort((a, b) => b[1] - a[1])[0];
+
+    return {
+      revenue,
+      profit,
+      units,
+      lowStock,
+      topSeller: topSeller ? `${topSeller[0]} (${topSeller[1]} pcs)` : 'No sales yet',
+      todaysSales,
+    };
+  }, [dashboard]);
+
+  async function loadAfterLogin(nextSession: Session) {
+    try {
+      setIsBusy(true);
+      if (nextSession.role === 'owner') {
+        await loadOwner(nextSession.token, nextSession.shopId);
+      } else if (nextSession.shopId) {
+        await loadShop(nextSession.token, nextSession.shopId);
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not load Supabase data');
+      setSession(null);
+      window.localStorage.removeItem(sessionKey);
+    } finally {
+      setIsBusy(false);
+    }
   }
 
-  function deleteProduct(id: number) {
-    setProducts((current) => current.filter((product) => product.id !== id));
-    setToast('Product deleted');
-    if (selectedId === id) setSelectedId(products[0]?.id ?? 0);
+  async function loadOwner(token: string, preferredShopId?: string) {
+    const [{ data: summaryData, error: summaryError }, { data: shopsData, error: shopsError }] =
+      await Promise.all([
+        getSupabaseClient().rpc('owner_summary', { p_token: token }),
+        getSupabaseClient().rpc('list_shops', { p_token: token }),
+      ]);
+
+    const summary = getRpcData<Record<string, unknown>>(summaryData, summaryError);
+    const shopRows = getRpcData<Record<string, unknown>[]>(shopsData, shopsError).map((shop) => ({
+      id: String(shop.id),
+      name: String(shop.name),
+      area: String(shop.area),
+      username: String(shop.username),
+      itemCount: toNumber(shop.itemCount),
+    }));
+
+    setOwnerSummary({
+      shopCount: toNumber(summary.shopCount),
+      revenue: toNumber(summary.revenue),
+      profit: toNumber(summary.profit),
+      inventoryValue: toNumber(summary.inventoryValue),
+      lowStockCount: toNumber(summary.lowStockCount),
+    });
+    setShops(shopRows);
+
+    const nextShopId = preferredShopId && shopRows.some((shop) => shop.id === preferredShopId)
+      ? preferredShopId
+      : shopRows[0]?.id ?? '';
+    setSelectedShopId(nextShopId);
+    if (nextShopId) await loadShop(token, nextShopId);
   }
 
-  function saveProduct(event: FormEvent<HTMLFormElement>) {
+  async function loadOwnerSummary(token: string) {
+    const { data, error } = await getSupabaseClient().rpc('owner_summary', { p_token: token });
+    const summary = getRpcData<Record<string, unknown>>(data, error);
+    setOwnerSummary({
+      shopCount: toNumber(summary.shopCount),
+      revenue: toNumber(summary.revenue),
+      profit: toNumber(summary.profit),
+      inventoryValue: toNumber(summary.inventoryValue),
+      lowStockCount: toNumber(summary.lowStockCount),
+    });
+  }
+
+  async function loadShop(token: string, shopId: string) {
+    const { data, error } = await getSupabaseClient().rpc('get_shop_dashboard', {
+      p_token: token,
+      p_shop_id: shopId,
+    });
+    const raw = getRpcData<Record<string, unknown>>(data, error);
+    const shop = raw.shop as Record<string, unknown>;
+    const items = (raw.items as Record<string, unknown>[]).map(mapItem);
+    const todaysSales = (raw.todaysSales as Record<string, unknown>[]).map(mapSale);
+
+    setDashboard({
+      shop: {
+        id: String(shop.id),
+        name: String(shop.name),
+        area: String(shop.area),
+        username: String(shop.username),
+      },
+      items,
+      todaysSales,
+    });
+    setSelectedShopId(String(shop.id));
+    setSelectedItemId(items[0]?.id ?? '');
+  }
+
+  async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const name = String(form.get('name') || '').trim();
-    const stock = Number(form.get('stock') || 0);
-    const price = String(form.get('price') || 'Custom').trim() || 'Custom';
-    const nextCategory = String(form.get('category') || 'Desk Setup');
-    const performance = String(form.get('performance') || 'Good') as Product['performance'];
+    const username = String(form.get('username') || '').trim();
+    const password = String(form.get('password') || '').trim();
 
-    if (!name) return;
-
-    if (modal === 'edit' && selectedProduct) {
-      setProducts((current) =>
-        current.map((product) =>
-          product.id === selectedProduct.id
-            ? {
-                ...product,
-                name,
-                stock,
-                price,
-                category: nextCategory,
-                performance,
-                score: scoreFromPerformance(performance),
-              }
-            : product,
-        ),
-      );
-      setToast('Product edited');
-    } else {
-      const nextProduct: Product = {
-        id: Date.now(),
-        name,
-        image: 'table',
-        review: '4,5',
-        performance,
-        views: 0,
-        sales: 0,
-        score: scoreFromPerformance(performance),
-        stock,
-        price,
-        category: nextCategory,
-        sku: `STR-${name.slice(0, 4).toUpperCase()}-${String(Date.now()).slice(-4)}`,
-        material: 'Stainless Steel',
-        visible: true,
+    try {
+      setIsBusy(true);
+      const { data, error } = await getSupabaseClient().rpc('login_user', {
+        p_username: username,
+        p_password: password,
+      });
+      const login = getRpcData<Record<string, unknown>>(data, error);
+      const nextSession: Session = {
+        token: String(login.token),
+        role: login.role === 'owner' ? 'owner' : 'shop',
+        shopId: login.shopId ? String(login.shopId) : undefined,
       };
-      setProducts((current) => [nextProduct, ...current]);
-      setSelectedId(nextProduct.id);
-      setToast('New product added');
+      setSession(nextSession);
+      window.localStorage.setItem(sessionKey, JSON.stringify(nextSession));
+      setMessage(nextSession.role === 'owner' ? 'Logged in as owner admin' : `Logged in to ${login.shopName}`);
+      await loadAfterLogin(nextSession);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Invalid username or password');
+    } finally {
+      setIsBusy(false);
     }
-
-    setModal(null);
-    setPage(1);
   }
 
-  const dashboardProps = {
-    products,
-    pageProducts,
-    selectedProduct,
-    query,
-    sortMode,
-    sortOpen,
-    showVisibleOnly,
-    category,
-    page,
-    totalPages,
-    toast,
-    setQuery: (value: string) => {
-      setQuery(value);
-      setPage(1);
-    },
-    setSortMode: (mode: SortMode) => {
-      setSortMode(mode);
-      setSortOpen(false);
-    },
-    setSortOpen,
-    setShowVisibleOnly: () => {
-      setShowVisibleOnly((value) => !value);
-      setPage(1);
-    },
-    setCategory: (value: string) => {
-      setCategory(value);
-      setPage(1);
-    },
-    setPage,
-    setSelectedId,
-    setModal,
-    toggleVisibility,
-    deleteProduct,
-  };
+  async function handleLogout() {
+    if (session?.token) {
+      await getSupabaseClient().rpc('logout_user', { p_token: session.token });
+    }
+    setSession(null);
+    setDashboard(null);
+    setCredentialNote(null);
+    window.localStorage.removeItem(sessionKey);
+  }
+
+  async function handleAddShop(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!session) return;
+
+    const form = new FormData(event.currentTarget);
+    const name = String(form.get('shopName') || '').trim();
+    if (!name) return;
+
+    const slug = cleanSlug(name) || `shop-${Date.now()}`;
+    const username = `${slug}-${Date.now().toString().slice(-4)}.admin`;
+    const password = generatePassword();
+
+    try {
+      setIsBusy(true);
+      const { data, error } = await getSupabaseClient().rpc('create_shop', {
+        p_token: session.token,
+        p_name: name,
+        p_area: String(form.get('area') || 'Pune').trim() || 'Pune',
+        p_username: username,
+        p_password: password,
+      });
+      const shop = getRpcData<Record<string, unknown>>(data, error);
+      const shopId = String(shop.id);
+      setCredentialNote({
+        label: String(shop.name),
+        username: String(shop.username),
+        password: String(shop.password),
+      });
+      setMessage(`${shop.name} created`);
+      event.currentTarget.reset();
+      await loadOwner(session.token, shopId);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not create shop');
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function resetShopPassword(shopId: string) {
+    if (!session) return;
+
+    const password = generatePassword();
+    try {
+      setIsBusy(true);
+      const { data, error } = await getSupabaseClient().rpc('reset_shop_password', {
+        p_token: session.token,
+        p_shop_id: shopId,
+        p_password: password,
+      });
+      const shop = getRpcData<Record<string, unknown>>(data, error);
+      setCredentialNote({
+        label: String(shop.name),
+        username: String(shop.username),
+        password: String(shop.password),
+      });
+      setMessage(`${shop.name} password reset`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not reset password');
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function handleAddItem(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!session || !dashboard) return;
+
+    const form = new FormData(event.currentTarget);
+    const name = String(form.get('name') || '').trim();
+    if (!name) return;
+
+    try {
+      setIsBusy(true);
+      const { data, error } = await getSupabaseClient().rpc('add_item', {
+        p_token: session.token,
+        p_shop_id: dashboard.shop.id,
+        p_name: name,
+        p_category: String(form.get('category') || 'General').trim() || 'General',
+        p_buying_price: numeric(form.get('buyingPrice')),
+        p_selling_price: numeric(form.get('sellingPrice')),
+        p_stock: numeric(form.get('stock')),
+        p_reorder_level: numeric(form.get('reorderLevel')),
+      });
+      const item = mapItem(getRpcData<Record<string, unknown>>(data, error));
+      setSelectedItemId(item.id);
+      setMessage(`${item.name} added to ${dashboard.shop.name}`);
+      event.currentTarget.reset();
+      setDashboard((current) =>
+        current
+          ? {
+              ...current,
+              items: [...current.items, item],
+            }
+          : current,
+      );
+      setShops((current) =>
+        current.map((shop) =>
+          shop.id === dashboard.shop.id ? { ...shop, itemCount: shop.itemCount + 1 } : shop,
+        ),
+      );
+      if (session.role === 'owner') await loadOwnerSummary(session.token);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not add item');
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function handleRecordSale(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!session || !dashboard || !selectedItem) return;
+
+    const form = new FormData(event.currentTarget);
+    try {
+      setIsBusy(true);
+      const { data, error } = await getSupabaseClient().rpc('record_sale', {
+        p_token: session.token,
+        p_shop_id: dashboard.shop.id,
+        p_item_id: selectedItem.id,
+        p_qty: Math.max(1, numeric(form.get('qty'))),
+        p_sold_price: Math.max(0, numeric(form.get('soldPrice'))),
+      });
+      const rawSale = getRpcData<Record<string, unknown>>(data, error);
+      const sale = mapSale(rawSale);
+      const remainingStock = toNumber(rawSale.remainingStock);
+      setMessage(`Sold ${sale.qty} ${sale.itemName} at ${dashboard.shop.name}`);
+      event.currentTarget.reset();
+      setDashboard((current) =>
+        current
+          ? {
+              ...current,
+              items: current.items.map((item) =>
+                item.id === selectedItem.id ? { ...item, stock: remainingStock } : item,
+              ),
+              todaysSales: [sale, ...current.todaysSales],
+            }
+          : current,
+      );
+      if (session.role === 'owner') await loadOwnerSummary(session.token);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not record sale');
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function updateClosingCount(itemId: string, stock: number) {
+    if (!session) return;
+
+    try {
+      setIsBusy(true);
+      const { data, error } = await getSupabaseClient().rpc('update_stock', {
+        p_token: session.token,
+        p_item_id: itemId,
+        p_stock: stock,
+      });
+      if (error) throw new Error(error.message);
+      const updatedItem = mapItem(getRpcData<Record<string, unknown>>(data, null));
+      setMessage('Closing stock updated');
+      setDashboard((current) =>
+        current
+          ? {
+              ...current,
+              items: current.items.map((item) => (item.id === itemId ? updatedItem : item)),
+            }
+          : current,
+      );
+      if (session.role === 'owner') await loadOwnerSummary(session.token);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not update stock');
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  if (!session) {
+    return (
+      <main className="auth-shell min-h-screen bg-[#f8f7f2] text-[#20221f]">
+        <section className="auth-grid mx-auto grid min-h-screen max-w-6xl items-center gap-10 px-5 py-8 lg:grid-cols-[1.1fr_0.9fr]">
+          <div className="auth-copy">
+            <div className="topline">
+              <p className="text-sm font-semibold uppercase text-[#66735c]">{copy.eyebrow}</p>
+              <LanguageToggle lang={lang} setLang={setLang} />
+            </div>
+            <h1 className="mt-3 max-w-2xl text-4xl font-semibold leading-tight sm:text-6xl">
+              {copy.heroTitle}
+            </h1>
+            <p className="mt-5 max-w-xl text-base leading-7 text-[#62655f]">
+              {copy.heroCopy}
+            </p>
+            <div className="mt-8 grid max-w-xl grid-cols-3 gap-3">
+              {[copy.shopLogins, copy.cloudData, copy.profitView].map((label) => (
+                <div key={label} className="feature-tile border border-[#d8d3c5] bg-white p-4">
+                  <p className="text-sm font-semibold">{label}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <form onSubmit={handleLogin} className="auth-card border border-[#d8d3c5] bg-white p-6 shadow-sm">
+            <h2 className="text-2xl font-semibold">{copy.adminLogin}</h2>
+            {!isSupabaseConfigured ? (
+              <p className="mt-4 rounded-lg border border-[#f0c7a5] bg-[#fff1df] px-3 py-2 text-sm text-[#8a3f20]">
+                {copy.configMissing}
+              </p>
+            ) : null}
+            <label className="mt-6 block text-sm font-medium" htmlFor="username">
+              {copy.username}
+            </label>
+            <input
+              id="username"
+              name="username"
+              required
+              autoComplete="username"
+              className="mt-2 w-full border border-[#cfc8b8] px-3 py-3 outline-none focus:border-[#2d6a4f]"
+              placeholder="owner"
+            />
+            <label className="mt-4 block text-sm font-medium" htmlFor="password">
+              {copy.password}
+            </label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              required
+              autoComplete="current-password"
+              className="mt-2 w-full border border-[#cfc8b8] px-3 py-3 outline-none focus:border-[#2d6a4f]"
+              placeholder="owner123"
+            />
+            <button
+              disabled={isBusy || !isSupabaseConfigured}
+              className="mt-6 w-full bg-[#2d6a4f] px-4 py-3 font-semibold text-white disabled:opacity-60"
+            >
+              {isBusy ? copy.opening : copy.openDashboard}
+            </button>
+            <p className="mt-4 text-sm text-[#62655f]">
+              {copy.loginHint}
+            </p>
+            <p className="mt-2 text-sm text-[#8a3f20]" role="status" aria-live="polite">
+              {message}
+            </p>
+          </form>
+        </section>
+      </main>
+    );
+  }
 
   return (
-    <main className="commerce-app">
-      <DesktopDashboard {...dashboardProps} />
-      <MobileProduct
-        product={selectedProduct}
-        onEdit={() => setModal('edit')}
-        onShare={() => setToast(`${selectedProduct.name} link copied`)}
-        onBoost={() => setToast(`${selectedProduct.name} boosted`)}
-        onDelete={() => deleteProduct(selectedProduct.id)}
-      />
-      {modal ? (
-        <ProductModal
-          mode={modal}
-          product={selectedProduct}
-          onClose={() => setModal(null)}
-          onSubmit={saveProduct}
-        />
-      ) : null}
+    <main className="dashboard-shell min-h-screen bg-[#f8f7f2] text-[#20221f]">
+      <header className="dashboard-header border-b border-[#ddd7c7] bg-white">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-5 py-4">
+          <div>
+            <p className="text-xs font-semibold uppercase text-[#66735c]">{copy.appName}</p>
+            <h1 className="text-2xl font-semibold">
+              {session.role === 'owner' ? copy.ownerDashboard : `${dashboard?.shop.name ?? 'Shop'} Dashboard`}
+            </h1>
+          </div>
+          <div className="flex items-center gap-3 text-sm">
+            <LanguageToggle lang={lang} setLang={setLang} />
+            <span className="border border-[#d8d3c5] bg-[#f8f7f2] px-3 py-2">
+              {isBusy ? copy.syncing : message}
+            </span>
+            <button type="button" onClick={handleLogout} className="border border-[#20221f] px-3 py-2">
+              {copy.logout}
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <section className="mx-auto max-w-7xl px-5 py-6">
+        {session.role === 'owner' ? (
+          <>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+              <Metric label={copy.totalShops} value={`${ownerSummary.shopCount}`} />
+              <Metric label={copy.todaySales} value={money(ownerSummary.revenue)} />
+              <Metric label={copy.todayProfit} value={money(ownerSummary.profit)} />
+              <Metric label={copy.stockValue} value={money(ownerSummary.inventoryValue)} />
+              <Metric label={copy.lowStockItems} value={`${ownerSummary.lowStockCount}`} />
+            </div>
+
+            <div className="mt-6 grid gap-5 xl:grid-cols-[1fr_0.75fr]">
+              <section className="panel border border-[#d8d3c5] bg-white">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e2ddcf] px-4 py-3">
+                  <h2 className="text-lg font-semibold">{copy.shopAccounts}</h2>
+                  <span className="text-sm text-[#62655f]">{copy.credentialsHint}</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[760px] text-left text-sm">
+                    <thead className="bg-[#eef1e9] text-xs uppercase text-[#4f5f48]">
+                      <tr>
+                        <th className="px-4 py-3">Shop</th>
+                        <th className="px-4 py-3">{copy.area}</th>
+                        <th className="px-4 py-3">{copy.username}</th>
+                        <th className="px-4 py-3">{copy.item}</th>
+                        <th className="px-4 py-3">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {shops.map((shop) => (
+                        <tr key={shop.id} className="border-t border-[#eee9dc]">
+                          <td className="px-4 py-3 font-medium">{shop.name}</td>
+                          <td className="px-4 py-3">{shop.area}</td>
+                          <td className="px-4 py-3 font-mono text-xs">{shop.username}</td>
+                          <td className="px-4 py-3">{shop.itemCount}</td>
+                          <td className="px-4 py-3">
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => void loadOwner(session.token, shop.id)}
+                                className="border border-[#2d6a4f] px-3 py-2 text-[#2d6a4f]"
+                              >
+                                {copy.view}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void resetShopPassword(shop.id)}
+                                className="border border-[#8a3f20] px-3 py-2 text-[#8a3f20]"
+                              >
+                                {copy.reset}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              <form onSubmit={handleAddShop} className="panel border border-[#d8d3c5] bg-white p-4">
+                <h2 className="text-lg font-semibold">{copy.addNewShop}</h2>
+                <div className="mt-4 grid gap-3">
+                  <Field label={copy.shopName} name="shopName" required />
+                  <Field label={copy.area} name="area" defaultValue="Pune" required />
+                </div>
+                <button
+                  disabled={isBusy}
+                  className="mt-4 w-full bg-[#2d6a4f] px-4 py-3 font-semibold text-white disabled:opacity-60"
+                >
+                  {copy.generateLogin}
+                </button>
+                {credentialNote ? (
+                  <CredentialCard credential={credentialNote} copy={copy} />
+                ) : (
+                  <p className="mt-3 text-sm text-[#62655f]">
+                    {copy.newShopHint}
+                  </p>
+                )}
+              </form>
+            </div>
+
+            <div className="panel mt-6 border border-[#d8d3c5] bg-white p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold">{copy.manageShop}</h2>
+                  <p className="text-sm text-[#62655f]">
+                    {dashboard?.shop.name ?? 'No shop selected'} - {dashboard?.shop.area ?? ''}
+                  </p>
+                </div>
+                <select
+                  value={selectedShopId}
+                  onChange={(event) => void loadOwner(session.token, event.target.value)}
+                  className="border border-[#cfc8b8] px-3 py-3"
+                >
+                  {shops.map((shop) => (
+                    <option key={shop.id} value={shop.id}>
+                      {shop.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </>
+        ) : null}
+
+        {dashboard ? (
+          <ShopDashboard
+            dashboard={dashboard}
+            copy={copy}
+            selectedItemId={selectedItemId}
+            selectedItem={selectedItem}
+            metrics={metrics}
+            setSelectedItemId={setSelectedItemId}
+            handleRecordSale={handleRecordSale}
+            handleAddItem={handleAddItem}
+            updateClosingCount={updateClosingCount}
+          />
+        ) : (
+          <section className="panel mt-6 border border-[#d8d3c5] bg-white p-6">{copy.loading}</section>
+        )}
+      </section>
     </main>
   );
 }
 
-function DesktopDashboard({
-  products,
-  pageProducts,
-  selectedProduct,
-  query,
-  sortMode,
-  sortOpen,
-  showVisibleOnly,
-  category,
-  page,
-  totalPages,
-  toast,
-  setQuery,
-  setSortMode,
-  setSortOpen,
-  setShowVisibleOnly,
-  setCategory,
-  setPage,
-  setSelectedId,
-  setModal,
-  toggleVisibility,
-  deleteProduct,
+function ShopDashboard({
+  dashboard,
+  copy,
+  selectedItemId,
+  selectedItem,
+  metrics,
+  setSelectedItemId,
+  handleRecordSale,
+  handleAddItem,
+  updateClosingCount,
 }: {
-  products: Product[];
-  pageProducts: Product[];
-  selectedProduct: Product;
-  query: string;
-  sortMode: SortMode;
-  sortOpen: boolean;
-  showVisibleOnly: boolean;
-  category: string;
-  page: number;
-  totalPages: number;
-  toast: string;
-  setQuery: (value: string) => void;
-  setSortMode: (mode: SortMode) => void;
-  setSortOpen: (value: boolean) => void;
-  setShowVisibleOnly: () => void;
-  setCategory: (value: string) => void;
-  setPage: (value: number) => void;
-  setSelectedId: (value: number) => void;
-  setModal: (value: 'new' | 'edit' | 'view') => void;
-  toggleVisibility: (id: number) => void;
-  deleteProduct: (id: number) => void;
+  dashboard: ShopDashboardData;
+  copy: (typeof dictionary)[Lang];
+  selectedItemId: string;
+  selectedItem?: Item;
+  metrics: {
+    revenue: number;
+    profit: number;
+    units: number;
+    lowStock: Item[];
+    topSeller: string;
+    todaysSales: Sale[];
+  };
+  setSelectedItemId: (id: string) => void;
+  handleRecordSale: (event: FormEvent<HTMLFormElement>) => void;
+  handleAddItem: (event: FormEvent<HTMLFormElement>) => void;
+  updateClosingCount: (itemId: string, stock: number) => void;
 }) {
-  const activeProducts = products.filter((product) => product.visible).length;
-  const sold = products.reduce((sum, product) => sum + product.sales, 0);
-
   return (
-    <section className="desktop-frame" aria-label="All product list dashboard">
-      <div className="brand-rail">
-        <div className="logo-box">SE</div>
-        <RailIcon active label="Catalog" badge="20">
-          <span className="rail-shape rail-capsule" />
-        </RailIcon>
-        <RailIcon label="Workspace" badge="99+">
-          <span className="rail-shape rail-sun" />
-        </RailIcon>
-        <RailIcon label="Create">
-          <span className="rail-plus">+</span>
-        </RailIcon>
-        <button type="button" className="rail-bottom" aria-label="Settings">⌘</button>
+    <>
+      <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <Metric label={copy.selectedShop} value={dashboard.shop.name} />
+        <Metric label={copy.todaySales} value={money(metrics.revenue)} />
+        <Metric label={copy.todayProfit} value={money(metrics.profit)} />
+        <Metric label={copy.unitsSold} value={`${metrics.units} pcs`} />
+        <Metric label={copy.highestSeller} value={metrics.topSeller} />
       </div>
 
-      <aside className="side-nav">
-        <button type="button" className="top-item">Performance</button>
-        <NavDivider />
-        <NavItem icon="⌁" label="Analytics" active={false} onClick={() => setCategory('All Product')} />
-        <NavItem icon="♧" label="Notification" badge="99+" onClick={() => setCategory('All Product')} />
-        <NavItem icon="◎" label="Performance" active onClick={() => setSortMode('performance')} />
-        <NavItem icon="▥" label="Orders" badge="120" muted onClick={() => setSortMode('stock')} />
-        <NavDivider />
-        <p className="nav-label">PRODUCT</p>
-        <NavItem icon="▰" label="All Product" selected={category === 'All Product'} onClick={() => setCategory('All Product')} />
-        <NavItem icon="♨" label="Shipping" onClick={() => setSortMode('stock')} />
-        <NavItem icon="◌" label="Campaign" onClick={() => setSortMode('performance')} />
-        <NavItem icon="◇" label="Catalog" onClick={() => setCategory('Desk Setup')} />
-        <NavDivider />
-        <p className="nav-label">MY STORE</p>
-        <button type="button" className="category-head" onClick={() => setCategory('All Product')}>
-          <span>▧ Product Category</span>
-          <span>⌃</span>
-        </button>
-        <div className="category-list">
-          {categories.map((item) => (
-            <button
-              key={item.name}
-              type="button"
-              className={category === item.name ? 'category-row selected-category' : 'category-row'}
-              onClick={() => setCategory(item.name)}
-            >
-              <span style={{ background: item.color }} />
-              <p>{item.name}</p>
-              <b style={{ color: item.color }}>• {item.count}</b>
-            </button>
-          ))}
-        </div>
-        <NavItem icon="♧" label="Finance" onClick={() => setSortMode('price')} />
-        <NavItem icon="♙" label="Customer" onClick={() => setShowVisibleOnly()} />
-      </aside>
-
-      <section className="content-pane">
-        <header className="topbar">
-          <h1>All Product List</h1>
-          <label className="search">
-            <span>⌕</span>
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search Product"
-              aria-label="Search Product"
-            />
-          </label>
-          <div className="menu-wrap">
-            <button type="button" className="toolbar-button" onClick={() => setSortOpen(!sortOpen)}>
-              <IconSort /> Sort By
-            </button>
-            {sortOpen ? (
-              <div className="sort-menu">
-                {(['name', 'stock', 'performance', 'price'] as SortMode[]).map((mode) => (
-                  <button key={mode} type="button" onClick={() => setSortMode(mode)}>
-                    {sortMode === mode ? '✓ ' : ''}{labelSort(mode)}
-                  </button>
+      <div className="mt-6 grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+        <section className="panel border border-[#d8d3c5] bg-white">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e2ddcf] px-4 py-3">
+            <h2 className="text-lg font-semibold">{copy.availableItems}</h2>
+            <span className="text-sm text-[#62655f]">
+              {dashboard.items.length} {copy.activeItems}
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[780px] text-left text-sm">
+              <thead className="bg-[#eef1e9] text-xs uppercase text-[#4f5f48]">
+                <tr>
+                  <th className="px-4 py-3">{copy.item}</th>
+                  <th className="px-4 py-3">{copy.category}</th>
+                  <th className="px-4 py-3">{copy.buy}</th>
+                  <th className="px-4 py-3">{copy.sell}</th>
+                  <th className="px-4 py-3">{copy.stock}</th>
+                  <th className="px-4 py-3">{copy.closingCount}</th>
+                  <th className="px-4 py-3">{copy.status}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dashboard.items.map((item) => (
+                  <tr key={item.id} className="border-t border-[#eee9dc]">
+                    <td className="px-4 py-3 font-medium">{item.name}</td>
+                    <td className="px-4 py-3">{item.category}</td>
+                    <td className="px-4 py-3">{money(item.buyingPrice)}</td>
+                    <td className="px-4 py-3">{money(item.defaultSellingPrice)}</td>
+                    <td className="px-4 py-3">{item.stock} pcs</td>
+                    <td className="px-4 py-3">
+                      <input
+                        aria-label={`Closing count for ${item.name}`}
+                        type="number"
+                        min="0"
+                        defaultValue={item.stock}
+                        onBlur={(event) => {
+                          const nextStock = Number(event.target.value);
+                          if (nextStock !== item.stock) void updateClosingCount(item.id, nextStock);
+                        }}
+                        className="w-24 border border-[#cfc8b8] px-2 py-2"
+                      />
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={
+                          item.stock <= item.reorderLevel
+                            ? 'bg-[#f7d8c4] px-2 py-1 text-[#8a3f20]'
+                            : 'bg-[#dfeadb] px-2 py-1 text-[#2d6a4f]'
+                        }
+                      >
+                        {item.stock <= item.reorderLevel ? copy.restock : copy.ok}
+                      </span>
+                    </td>
+                  </tr>
                 ))}
-              </div>
-            ) : null}
-          </div>
-          <button type="button" className={showVisibleOnly ? 'toolbar-button pressed' : 'toolbar-button'} onClick={setShowVisibleOnly}>
-            <IconBox /> Show All Product <span>{products.length + 111}</span>
-          </button>
-          <button type="button" className="new-product" onClick={() => setModal('new')}>
-            + New Product
-          </button>
-        </header>
-
-        <section className="stats-panel">
-          <div className="panel-title">
-            <h2>Product Statistic</h2>
-            <span>{toast}</span>
-          </div>
-          <div className="stat-grid">
-            <Statistic label="Active Product" value={String(activeProducts + 347)} suffix="Product" />
-            <Statistic label="Winning Product" value={`🧡 ${selectedProduct.name.slice(0, 9)} ...`} />
-            <Statistic label="Average Performance" value="Good!" gauge />
-            <Statistic label="Product Sold" value={sold.toLocaleString('en-US')} suffix="Items" />
-            <Statistic label="Product Returned" value="420" suffix="Items" />
+              </tbody>
+            </table>
           </div>
         </section>
 
-        <div className="product-list">
-          {pageProducts.map((product) => (
-            <article key={product.id} className="product-row">
-              <button
-                type="button"
-                className="product-info"
-                onClick={() => {
-                  setSelectedId(product.id);
-                  setModal('view');
-                }}
-              >
-                <ProductThumb kind={product.image} />
-                <div>
-                  <h3>{product.name}</h3>
-                  <p>Review : <b>{product.review}★</b></p>
-                </div>
-              </button>
+        <section className="grid gap-5">
+          <form onSubmit={handleRecordSale} className="panel border border-[#d8d3c5] bg-white p-4">
+            <h2 className="text-lg font-semibold">{copy.recordSold}</h2>
+            <label className="mt-4 block text-sm font-medium" htmlFor="sale-item">
+              {copy.product}
+            </label>
+            <select
+              id="sale-item"
+              value={selectedItemId}
+              onChange={(event) => setSelectedItemId(event.target.value)}
+              className="mt-2 w-full border border-[#cfc8b8] px-3 py-3"
+            >
+              {dashboard.items.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name} - {item.stock} pcs left
+                </option>
+              ))}
+            </select>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <Field label={copy.qtySold} name="qty" type="number" defaultValue="1" />
+              <Field
+                key={selectedItemId}
+                label={copy.soldPrice}
+                name="soldPrice"
+                type="number"
+                defaultValue={String(selectedItem?.defaultSellingPrice ?? 0)}
+              />
+            </div>
+            <button className="mt-4 w-full bg-[#2d6a4f] px-4 py-3 font-semibold text-white">
+              {copy.saveSale}
+            </button>
+          </form>
 
-              <div className="row-separator" />
-              <div className="performance">
-                <p>Performance <span>{product.performance}</span></p>
-                <div className="mini-metrics">
-                  <span><IconTrend /> {formatCompact(product.views)}</span>
-                  <span><IconBag /> {formatCompact(product.sales)}</span>
-                </div>
-              </div>
-              <Gauge value={product.score} />
-              <div className="row-separator" />
-              <InfoBlock label="Stock" value={String(product.stock)} icon={<IconCube />} />
-              <div className="row-separator" />
-              <InfoBlock label="Product Price" value={product.price} icon={<span className="dollar">$</span>} />
-              <div className="visibility">
-                <p>Visibility</p>
-                <button
-                  type="button"
-                  className={product.visible ? 'toggle on' : 'toggle'}
-                  onClick={() => toggleVisibility(product.id)}
-                  aria-label={`Toggle visibility for ${product.name}`}
-                />
-              </div>
-              <div className="actions" aria-label={`Actions for ${product.name}`}>
-                <button
-                  type="button"
-                  aria-label={`Edit ${product.name}`}
-                  onClick={() => {
-                    setSelectedId(product.id);
-                    setModal('edit');
-                  }}
-                >
-                  <IconPen />
-                </button>
-                <button
-                  type="button"
-                  aria-label={`View ${product.name}`}
-                  onClick={() => {
-                    setSelectedId(product.id);
-                    setModal('view');
-                  }}
-                >
-                  <IconEye />
-                </button>
-                <button type="button" aria-label={`Delete ${product.name}`} onClick={() => deleteProduct(product.id)}>
-                  <IconMore />
-                </button>
-              </div>
-            </article>
-          ))}
-        </div>
-
-        <footer className="pager">
-          <button type="button" disabled={page === 1} onClick={() => setPage(Math.max(1, page - 1))}>
-            Previous
-          </button>
-          <span>Page {page} of {totalPages}</span>
-          <button type="button" disabled={page === totalPages} onClick={() => setPage(Math.min(totalPages, page + 1))}>
-            Next
-          </button>
-        </footer>
-      </section>
-    </section>
-  );
-}
-
-function MobileProduct({
-  product,
-  onEdit,
-  onShare,
-  onBoost,
-  onDelete,
-}: {
-  product: Product;
-  onEdit: () => void;
-  onShare: () => void;
-  onBoost: () => void;
-  onDelete: () => void;
-}) {
-  return (
-    <section className="mobile-scene" aria-label={`${product.name} product detail`}>
-      <article className="phone-card">
-        <header className="phone-head">
-          <div>
-            <h1>{product.name}</h1>
-            <p>$ {product.price.replace(' USD', '')}</p>
-          </div>
-          <div className="phone-actions">
-            <button type="button" aria-label="Product gallery"><IconGrid /></button>
-            <button type="button" aria-label="Close product">×</button>
-          </div>
-        </header>
-
-        <div className="gallery">
-          <button type="button" className="hero-product" aria-label="Front image">
-            <ProductThumb kind={product.image} large />
-            <span>◆ Front Image</span>
-          </button>
-          <button type="button" className="side-product" aria-label="Side image">
-            <ProductThumb kind={product.image} large />
-          </button>
-          <div className="thumb-row">
-            <button type="button" aria-label="Thumbnail one"><ProductThumb kind={product.image} /></button>
-            <button type="button" aria-label="Thumbnail two"><ProductThumb kind="candle" /></button>
-            <button type="button" aria-label="Thumbnail three"><ProductThumb kind="lamp" /></button>
-          </div>
-        </div>
-
-        <h2>Details</h2>
-        <dl className="details-grid">
-          <Detail label="SKU" value={product.sku} />
-          <Detail label="Stock" value={`${product.stock} Ready`} />
-          <Detail label="Price" value={`$${product.price.replace(' USD', '')}`} />
-          <Detail label="Material" value={product.material} />
-          <Detail label="Category" value={product.category} />
-          <Detail label="Status" value={product.visible ? '• Active' : '• Hidden'} active={product.visible} />
-        </dl>
-
-        <div className="stats-title">
-          <h2>Statistics</h2>
-          <button type="button">6 Month⌄</button>
-        </div>
-        <div className="phone-stat-grid">
-          <Statistic label="Product View" value={formatPhoneNumber(product.views)} suffix="View" />
-          <Statistic label="Product Sales" value={formatPhoneNumber(product.sales)} suffix="Items" />
-          <Statistic label="Product Returned" value="420" suffix="Items" />
-        </div>
-        <div className="chart">
-          {Array.from({ length: 34 }).map((_, index) => (
-            <span
-              key={index}
-              className={index > 26 ? 'dark' : index === 25 ? 'green' : ''}
-              style={{ height: `${30 + ((index * 17) % 96)}px` }}
-            />
-          ))}
-          <div className="chart-tip">
-            <p>Gross Profit <b>$4.3K</b></p>
-            <p>Item Sold <b>{product.stock}</b></p>
-          </div>
-        </div>
-        <footer className="detail-actions">
-          <button type="button" onClick={onEdit}><IconPen /> Edit Product</button>
-          <button type="button" onClick={onShare}><IconShare /> Share Product</button>
-          <button type="button" className="boost" onClick={onBoost}><IconBoost /> Boost Product</button>
-          <button type="button" aria-label="Delete product" onClick={onDelete}><IconTrash /></button>
-        </footer>
-      </article>
-    </section>
-  );
-}
-
-function ProductModal({
-  mode,
-  product,
-  onClose,
-  onSubmit,
-}: {
-  mode: 'new' | 'edit' | 'view';
-  product: Product;
-  onClose: () => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-}) {
-  if (mode === 'view') {
-    return (
-      <div className="modal-backdrop" role="dialog" aria-modal="true">
-        <article className="view-modal">
-          <button type="button" className="modal-close" onClick={onClose}>×</button>
-          <ProductThumb kind={product.image} large />
-          <div>
-            <h2>{product.name}</h2>
-            <p>{product.sku}</p>
-            <dl className="modal-details">
-              <Detail label="Stock" value={`${product.stock} Ready`} />
-              <Detail label="Price" value={product.price} />
-              <Detail label="Category" value={product.category} />
-              <Detail label="Status" value={product.visible ? 'Active' : 'Hidden'} active={product.visible} />
-            </dl>
-          </div>
-        </article>
+          <form onSubmit={handleAddItem} className="panel border border-[#d8d3c5] bg-white p-4">
+            <h2 className="text-lg font-semibold">{copy.addItem}</h2>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <Field label={copy.itemName} name="name" required />
+              <Field label={copy.category} name="category" defaultValue="General" required />
+              <Field label={copy.buyingPrice} name="buyingPrice" type="number" required />
+              <Field label={copy.sellingPrice} name="sellingPrice" type="number" required />
+              <Field label={copy.totalQty} name="stock" type="number" required />
+              <Field label={copy.restockAlert} name="reorderLevel" type="number" defaultValue="5" />
+            </div>
+            <button className="mt-4 w-full border border-[#2d6a4f] px-4 py-3 font-semibold text-[#2d6a4f]">
+              {copy.addItemAction}
+            </button>
+          </form>
+        </section>
       </div>
-    );
+
+      <div className="mt-5 grid gap-5 lg:grid-cols-2">
+        <section className="panel border border-[#d8d3c5] bg-white p-4">
+          <h2 className="text-lg font-semibold">{copy.lowStockAnalysis}</h2>
+          <div className="mt-3 space-y-2">
+            {metrics.lowStock.length ? (
+              metrics.lowStock.map((item) => (
+                <div key={item.id} className="flex items-center justify-between bg-[#fbf1e8] px-3 py-2 text-sm">
+                  <span>{item.name}</span>
+                  <span>{item.stock} pcs left</span>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-[#62655f]">{copy.noLowStock}</p>
+            )}
+          </div>
+        </section>
+
+        <section className="panel border border-[#d8d3c5] bg-white p-4">
+          <h2 className="text-lg font-semibold">{copy.todaySalesLog}</h2>
+          <div className="mt-3 max-h-64 space-y-2 overflow-auto">
+            {metrics.todaysSales.length ? (
+              metrics.todaysSales.map((sale) => (
+                <div key={sale.id} className="grid grid-cols-[1fr_auto] gap-3 border-b border-[#eee9dc] pb-2 text-sm">
+                  <span>
+                    {sale.itemName} x {sale.qty}
+                  </span>
+                  <span>{money(sale.soldPrice * sale.qty)}</span>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-[#62655f]">{copy.noSales}</p>
+            )}
+          </div>
+        </section>
+      </div>
+    </>
+  );
+}
+
+const Metric = memo(function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <article className="border border-[#d8d3c5] bg-white p-4">
+      <p className="text-xs font-semibold uppercase text-[#66735c]">{label}</p>
+      <p className="mt-2 text-2xl font-semibold">{value}</p>
+    </article>
+  );
+});
+
+function LanguageToggle({ lang, setLang }: { lang: Lang; setLang: (lang: Lang) => void }) {
+  return (
+    <div className="language-toggle" aria-label="Language selector">
+      <button
+        type="button"
+        className={lang === 'en' ? 'active' : ''}
+        onClick={() => setLang('en')}
+      >
+        EN
+      </button>
+      <button
+        type="button"
+        className={lang === 'mr' ? 'active' : ''}
+        onClick={() => setLang('mr')}
+      >
+        मर
+      </button>
+    </div>
+  );
+}
+
+function CredentialCard({
+  credential,
+  copy,
+}: {
+  credential: CredentialNote;
+  copy: (typeof dictionary)[Lang];
+}) {
+  const [copied, setCopied] = useState(false);
+  const credentialText = `${credential.username} / ${credential.password}`;
+
+  async function copyCredential() {
+    await navigator.clipboard.writeText(credentialText);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1800);
   }
 
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true">
-      <form className="product-modal" onSubmit={onSubmit}>
-        <button type="button" className="modal-close" onClick={onClose}>×</button>
-        <h2>{mode === 'edit' ? 'Edit Product' : 'New Product'}</h2>
-        <label>
-          Product Name
-          <input name="name" defaultValue={mode === 'edit' ? product.name : ''} required />
-        </label>
-        <label>
-          Stock
-          <input name="stock" type="number" min="0" defaultValue={mode === 'edit' ? product.stock : 120} required />
-        </label>
-        <label>
-          Product Price
-          <input name="price" defaultValue={mode === 'edit' ? product.price : 'Custom'} required />
-        </label>
-        <label>
-          Category
-          <select name="category" defaultValue={mode === 'edit' ? product.category : 'Desk Setup'}>
-            <option>Desk Setup</option>
-            <option>Laptop & Device</option>
-            <option>Decoration Lamp</option>
-            <option>Man Fashion</option>
-          </select>
-        </label>
-        <label>
-          Performance
-          <select name="performance" defaultValue={mode === 'edit' ? product.performance : 'Good'}>
-            <option>Excellent</option>
-            <option>Good</option>
-            <option>Bad</option>
-          </select>
-        </label>
-        <button type="submit" className="save-button">{mode === 'edit' ? 'Save Product' : 'Add Product'}</button>
-      </form>
+    <div className="credential-card mt-3 border border-[#d8d3c5] bg-[#f8f7f2] p-3">
+      <p className="text-xs font-semibold uppercase text-[#66735c]">{copy.generatedCredential}</p>
+      <p className="mt-1 text-sm font-semibold">{credential.label}</p>
+      <p className="mt-2 break-all font-mono text-xs">{credentialText}</p>
+      <button
+        type="button"
+        onClick={() => void copyCredential()}
+        className="mt-3 border border-[#2d6a4f] px-3 py-2 text-sm font-semibold text-[#2d6a4f]"
+      >
+        {copied ? copy.copied : copy.copy}
+      </button>
     </div>
   );
 }
 
-function RailIcon({
-  children,
-  badge,
-  active,
+const Field = memo(function Field({
   label,
-}: {
-  children: ReactNode;
-  badge?: string;
-  active?: boolean;
-  label: string;
-}) {
-  return (
-    <button type="button" className={active ? 'rail-icon active' : 'rail-icon'} aria-label={label}>
-      {children}
-      {badge ? <b>{badge}</b> : null}
-    </button>
-  );
-}
-
-function NavItem({
-  icon,
-  label,
-  badge,
-  selected,
-  active,
-  muted,
-  onClick,
-}: {
-  icon: string;
-  label: string;
-  badge?: string;
-  selected?: boolean;
-  active?: boolean;
-  muted?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      className={selected ? 'nav-item selected' : active ? 'nav-item active' : 'nav-item'}
-      onClick={onClick}
-    >
-      <span>{icon}</span>
-      <p>{label}</p>
-      {badge ? <b className={muted ? 'muted-badge' : ''}>{badge}</b> : null}
-    </button>
-  );
-}
-
-function NavDivider() {
-  return <div className="nav-divider" />;
-}
-
-function Statistic({
-  label,
-  value,
-  suffix,
-  gauge,
+  name,
+  type = 'text',
+  defaultValue,
+  required = false,
 }: {
   label: string;
-  value: string;
-  suffix?: string;
-  gauge?: boolean;
+  name: string;
+  type?: string;
+  defaultValue?: string;
+  required?: boolean;
 }) {
   return (
-    <div className="statistic">
-      <p>{label}</p>
-      <strong>
-        {gauge ? <span className="small-gauge" /> : null}
-        {value}
-        {suffix ? <span>{suffix}</span> : null}
-      </strong>
-    </div>
+    <label className="form-field block text-sm font-medium">
+      {label}
+      <input
+        name={name}
+        type={type}
+        min={type === 'number' ? '0' : undefined}
+        step={type === 'number' ? '0.01' : undefined}
+        defaultValue={defaultValue}
+        required={required}
+        className="mt-2 w-full border border-[#cfc8b8] px-3 py-3 font-normal outline-none focus:border-[#2d6a4f]"
+      />
+    </label>
   );
-}
-
-function InfoBlock({ label, value, icon }: { label: string; value: string; icon: ReactNode }) {
-  return (
-    <div className="info-block">
-      <p>{label}</p>
-      <span>{icon} {value}</span>
-    </div>
-  );
-}
-
-function Detail({ label, value, active }: { label: string; value: string; active?: boolean }) {
-  return (
-    <div>
-      <dt>{label}</dt>
-      <dd className={active ? 'active-detail' : ''}>{value}</dd>
-    </div>
-  );
-}
-
-function Gauge({ value }: { value: number }) {
-  return (
-    <div
-      className="gauge"
-      style={{
-        '--score': `${Math.max(0, Math.min(100, value))}%`,
-      } as CSSProperties}
-      aria-label={`Performance ${value}%`}
-    />
-  );
-}
-
-function ProductThumb({ kind, large = false }: { kind: string; large?: boolean }) {
-  return (
-    <div className={large ? `product-thumb ${kind} large` : `product-thumb ${kind}`} aria-hidden="true">
-      <i />
-      <b />
-      <span />
-    </div>
-  );
-}
-
-function priceValue(price: string) {
-  const parsed = Number(price.replace(/[^0-9.]/g, ''));
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function scoreFromPerformance(performance: Product['performance']) {
-  if (performance === 'Excellent') return 88;
-  if (performance === 'Good') return 68;
-  return 31;
-}
-
-function formatCompact(value: number) {
-  if (value >= 1000) return `${(value / 1000).toFixed(1).replace('.', ',')}k`;
-  return String(value);
-}
-
-function formatPhoneNumber(value: number) {
-  if (value >= 10000) return `${Math.round(value / 1000)}K`;
-  if (value >= 1000) return `${(value / 1000).toFixed(1).replace('.', ',')}K`;
-  return String(value);
-}
-
-function labelSort(mode: SortMode) {
-  return mode === 'name' ? 'Product Name' : mode === 'stock' ? 'Stock' : mode === 'price' ? 'Price' : 'Performance';
-}
-
-function IconSort() {
-  return <span className="ui-icon">≡</span>;
-}
-
-function IconBox() {
-  return <span className="ui-icon">▣</span>;
-}
-
-function IconTrend() {
-  return <span className="row-icon">⌁</span>;
-}
-
-function IconBag() {
-  return <span className="row-icon">▢</span>;
-}
-
-function IconCube() {
-  return <span className="row-icon">◇</span>;
-}
-
-function IconPen() {
-  return <span className="icon-pen" />;
-}
-
-function IconEye() {
-  return <span className="icon-eye" />;
-}
-
-function IconMore() {
-  return <span className="icon-more">•••</span>;
-}
-
-function IconGrid() {
-  return <span className="icon-grid">▦</span>;
-}
-
-function IconShare() {
-  return <span className="icon-share">⌁</span>;
-}
-
-function IconBoost() {
-  return <span className="icon-boost">♻</span>;
-}
-
-function IconTrash() {
-  return <span className="icon-trash">⌫</span>;
-}
+});
