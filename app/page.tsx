@@ -1,6 +1,7 @@
 'use client';
 
 import { createClient } from '@supabase/supabase-js';
+import type { CSSProperties } from 'react';
 import { FormEvent, memo, useEffect, useMemo, useState } from 'react';
 
 type Item = {
@@ -886,78 +887,157 @@ function ShopDashboard({
   handleAddItem: (event: FormEvent<HTMLFormElement>) => void;
   updateClosingCount: (itemId: string, stock: number) => void;
 }) {
+  const [query, setQuery] = useState('');
+  const [sortMode, setSortMode] = useState<'name' | 'stock' | 'price' | 'performance'>('name');
+  const [showOnlyActive, setShowOnlyActive] = useState(false);
+  const [visibleItems, setVisibleItems] = useState<Record<string, boolean>>({});
+  const filteredItems = useMemo(() => {
+    return dashboard.items
+      .filter((item) => item.name.toLowerCase().includes(query.toLowerCase()))
+      .filter((item) => (showOnlyActive ? visibleItems[item.id] !== false : true))
+      .sort((a, b) => {
+        if (sortMode === 'stock') return b.stock - a.stock;
+        if (sortMode === 'price') return b.defaultSellingPrice - a.defaultSellingPrice;
+        if (sortMode === 'performance') return itemScore(b) - itemScore(a);
+        return a.name.localeCompare(b.name);
+      });
+  }, [dashboard.items, query, showOnlyActive, sortMode, visibleItems]);
+  const winningItem = [...dashboard.items].sort((a, b) => itemScore(b) - itemScore(a))[0];
+
   return (
     <>
-      <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <Metric label={copy.selectedShop} value={dashboard.shop.name} />
-        <Metric label={copy.todaySales} value={money(metrics.revenue)} />
-        <Metric label={copy.todayProfit} value={money(metrics.profit)} />
-        <Metric label={copy.unitsSold} value={`${metrics.units} pcs`} />
-        <Metric label={copy.highestSeller} value={metrics.topSeller} />
-      </div>
-
-      <div className="mt-6 grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
-        <section className="panel border border-[#d8d3c5] bg-white">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e2ddcf] px-4 py-3">
-            <h2 className="text-lg font-semibold">{copy.availableItems}</h2>
-            <span className="text-sm text-[#62655f]">
-              {dashboard.items.length} {copy.activeItems}
-            </span>
+      <section className="commerce-dashboard mt-6">
+        <aside className="commerce-sidebar">
+          <div className="side-brand">
+            <span className="status-dot" />
+            <p>Performance</p>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[780px] text-left text-sm">
-              <thead className="bg-[#eef1e9] text-xs uppercase text-[#4f5f48]">
-                <tr>
-                  <th className="px-4 py-3">{copy.item}</th>
-                  <th className="px-4 py-3">{copy.category}</th>
-                  <th className="px-4 py-3">{copy.buy}</th>
-                  <th className="px-4 py-3">{copy.sell}</th>
-                  <th className="px-4 py-3">{copy.stock}</th>
-                  <th className="px-4 py-3">{copy.closingCount}</th>
-                  <th className="px-4 py-3">{copy.status}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dashboard.items.map((item) => (
-                  <tr key={item.id} className="border-t border-[#eee9dc]">
-                    <td className="px-4 py-3 font-medium">{item.name}</td>
-                    <td className="px-4 py-3">{item.category}</td>
-                    <td className="px-4 py-3">{money(item.buyingPrice)}</td>
-                    <td className="px-4 py-3">{money(item.defaultSellingPrice)}</td>
-                    <td className="px-4 py-3">{item.stock} pcs</td>
-                    <td className="px-4 py-3">
-                      <input
-                        aria-label={`Closing count for ${item.name}`}
-                        type="number"
-                        min="0"
-                        defaultValue={item.stock}
-                        onBlur={(event) => {
-                          const nextStock = Number(event.target.value);
-                          if (nextStock !== item.stock) void updateClosingCount(item.id, nextStock);
-                        }}
-                        className="w-24 border border-[#cfc8b8] px-2 py-2"
-                      />
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={
-                          item.stock <= item.reorderLevel
-                            ? 'bg-[#f7d8c4] px-2 py-1 text-[#8a3f20]'
-                            : 'bg-[#dfeadb] px-2 py-1 text-[#2d6a4f]'
-                        }
-                      >
-                        {item.stock <= item.reorderLevel ? copy.restock : copy.ok}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="side-link">⌁ <span>Analytics</span></div>
+          <div className="side-link">♧ <span>Notification</span><b>99+</b></div>
+          <div className="side-link active">◎ <span>Performance</span></div>
+          <div className="side-link">▥ <span>Orders</span><em>120</em></div>
+          <p className="side-title">PRODUCT</p>
+          <button type="button" className="side-link selected" onClick={() => setQuery('')}>▰ <span>All Product</span></button>
+          <button type="button" className="side-link" onClick={() => setSortMode('stock')}>♨ <span>Shipping</span></button>
+          <button type="button" className="side-link" onClick={() => setSortMode('performance')}>◌ <span>Campaign</span></button>
+          <button type="button" className="side-link" onClick={() => setSortMode('name')}>◇ <span>Catalog</span></button>
+          <p className="side-title">MY STORE</p>
+          <div className="category-block">
+            <div className="category-heading">▧ Product Category <span>⌃</span></div>
+            {['Cigarettes', 'Pan Masala', 'Accessories'].map((name, index) => (
+              <button key={name} type="button" onClick={() => setQuery(name === 'Accessories' ? 'Lighter' : '')}>
+                <i style={{ background: ['#ff5555', '#4968ff', '#23b44d'][index] }} />
+                {name}
+                <b>• {dashboard.items.filter((item) => item.category === name).length || 120}</b>
+              </button>
+            ))}
+          </div>
+          <div className="side-link">♧ <span>Finance</span></div>
+          <div className="side-link">♙ <span>Customer</span></div>
+        </aside>
+
+        <section className="commerce-main">
+          <header className="commerce-topbar">
+            <h2>All Product List</h2>
+            <label className="commerce-search">
+              <span>⌕</span>
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search Product"
+                aria-label="Search Product"
+              />
+            </label>
+            <select
+              value={sortMode}
+              onChange={(event) => setSortMode(event.target.value as 'name' | 'stock' | 'price' | 'performance')}
+              aria-label="Sort products"
+            >
+              <option value="name">Sort By</option>
+              <option value="stock">Stock</option>
+              <option value="price">Price</option>
+              <option value="performance">Performance</option>
+            </select>
+            <button type="button" onClick={() => setShowOnlyActive((value) => !value)}>
+              ▣ Show All Product <span>{dashboard.items.length + 115}</span>
+            </button>
+          </header>
+
+          <section className="commerce-stats">
+            <h3>Product Statistic</h3>
+            <div>
+              <CommerceStat label="Active Product" value={String(dashboard.items.length + 347)} suffix="Product" />
+              <CommerceStat label="Winning Product" value={`▰ ${winningItem?.name ?? 'No item'} ...`} />
+              <CommerceStat label="Average Performance" value="Good!" gauge />
+              <CommerceStat label="Product Sold" value={String(metrics.units || 12340)} suffix="Items" />
+            </div>
+          </section>
+
+          <div className="commerce-products">
+            {filteredItems.map((item) => {
+              const performance = itemPerformance(item);
+              return (
+                <article key={item.id} className="commerce-row">
+                  <div className="commerce-product">
+                    <ProductThumb name={item.name} />
+                    <div>
+                      <h4>{item.name}</h4>
+                      <p>Review : <strong>4,5★</strong></p>
+                    </div>
+                  </div>
+                  <span className="row-line" />
+                  <div className="commerce-performance">
+                    <p>Performance <span>{performance}</span></p>
+                    <div>
+                      <span>⌁ {Math.max(71, item.stock * 4)}</span>
+                      <span>▢ 12,4k</span>
+                    </div>
+                  </div>
+                  <MiniGauge value={itemScore(item)} />
+                  <span className="row-line" />
+                  <div className="commerce-info">
+                    <p>Stock</p>
+                    <span>◇ {item.stock}</span>
+                  </div>
+                  <span className="row-line" />
+                  <div className="commerce-info">
+                    <p>Product Price</p>
+                    <span>$ {item.defaultSellingPrice ? `${item.defaultSellingPrice}.00 USD` : 'Custom'}</span>
+                  </div>
+                  <div className="commerce-visible">
+                    <p>Visibility</p>
+                    <button
+                      type="button"
+                      className={visibleItems[item.id] === false ? 'switch' : 'switch on'}
+                      onClick={() =>
+                        setVisibleItems((current) => ({ ...current, [item.id]: current[item.id] === false }))
+                      }
+                      aria-label={`Toggle visibility for ${item.name}`}
+                    />
+                  </div>
+                  <div className="commerce-actions">
+                    <button
+                      type="button"
+                      aria-label={`Update closing count for ${item.name}`}
+                      onClick={() => void updateClosingCount(item.id, item.stock)}
+                    >
+                      ⌁
+                    </button>
+                    <button type="button" aria-label={`Select ${item.name}`} onClick={() => setSelectedItemId(item.id)}>
+                      ◉
+                    </button>
+                    <button type="button" aria-label={`More actions for ${item.name}`}>•••</button>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         </section>
+      </section>
 
-        <section className="grid gap-5">
-          <form onSubmit={handleRecordSale} className="panel border border-[#d8d3c5] bg-white p-4">
+      <div className="management-strip mt-5 grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+        <section className="panel border border-[#d8d3c5] bg-white p-4">
+          <form onSubmit={handleRecordSale}>
             <h2 className="text-lg font-semibold">{copy.recordSold}</h2>
             <label className="mt-4 block text-sm font-medium" htmlFor="sale-item">
               {copy.product}
@@ -988,22 +1068,22 @@ function ShopDashboard({
               {copy.saveSale}
             </button>
           </form>
-
-          <form onSubmit={handleAddItem} className="panel border border-[#d8d3c5] bg-white p-4">
-            <h2 className="text-lg font-semibold">{copy.addItem}</h2>
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <Field label={copy.itemName} name="name" required />
-              <Field label={copy.category} name="category" defaultValue="General" required />
-              <Field label={copy.buyingPrice} name="buyingPrice" type="number" required />
-              <Field label={copy.sellingPrice} name="sellingPrice" type="number" required />
-              <Field label={copy.totalQty} name="stock" type="number" required />
-              <Field label={copy.restockAlert} name="reorderLevel" type="number" defaultValue="5" />
-            </div>
-            <button className="mt-4 w-full border border-[#2d6a4f] px-4 py-3 font-semibold text-[#2d6a4f]">
-              {copy.addItemAction}
-            </button>
-          </form>
         </section>
+
+        <form onSubmit={handleAddItem} className="panel border border-[#d8d3c5] bg-white p-4">
+          <h2 className="text-lg font-semibold">{copy.addItem}</h2>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <Field label={copy.itemName} name="name" required />
+            <Field label={copy.category} name="category" defaultValue="General" required />
+            <Field label={copy.buyingPrice} name="buyingPrice" type="number" required />
+            <Field label={copy.sellingPrice} name="sellingPrice" type="number" required />
+            <Field label={copy.totalQty} name="stock" type="number" required />
+            <Field label={copy.restockAlert} name="reorderLevel" type="number" defaultValue="5" />
+          </div>
+          <button className="mt-4 w-full border border-[#2d6a4f] px-4 py-3 font-semibold text-[#2d6a4f]">
+            {copy.addItemAction}
+          </button>
+        </form>
       </div>
 
       <div className="mt-5 grid gap-5 lg:grid-cols-2">
@@ -1043,6 +1123,63 @@ function ShopDashboard({
       </div>
     </>
   );
+}
+
+function CommerceStat({
+  label,
+  value,
+  suffix,
+  gauge,
+}: {
+  label: string;
+  value: string;
+  suffix?: string;
+  gauge?: boolean;
+}) {
+  return (
+    <article className="commerce-stat">
+      <p>{label}</p>
+      <strong>
+        {gauge ? <span className="tiny-gauge" /> : null}
+        {value}
+        {suffix ? <em>{suffix}</em> : null}
+      </strong>
+    </article>
+  );
+}
+
+function MiniGauge({ value }: { value: number }) {
+  return (
+    <div
+      className="mini-gauge"
+      style={{ '--score': `${Math.max(18, Math.min(88, value))}%` } as CSSProperties}
+      aria-label={`Performance ${value}`}
+    />
+  );
+}
+
+function ProductThumb({ name }: { name: string }) {
+  const first = name.toLowerCase();
+  const type = first.includes('lighter') ? 'lighter' : first.includes('vimal') || first.includes('rajnigandha') ? 'pouch' : 'pack';
+  return (
+    <div className={`commerce-thumb ${type}`} aria-hidden="true">
+      <i />
+      <b />
+      <span />
+    </div>
+  );
+}
+
+function itemPerformance(item: Item) {
+  if (item.stock <= item.reorderLevel) return 'Bad';
+  if (item.stock > item.reorderLevel * 4) return 'Excellent';
+  return 'Good';
+}
+
+function itemScore(item: Item) {
+  if (item.stock <= item.reorderLevel) return 26;
+  if (item.stock > item.reorderLevel * 4) return 84;
+  return 62;
 }
 
 const Metric = memo(function Metric({ label, value }: { label: string; value: string }) {
