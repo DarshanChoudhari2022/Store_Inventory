@@ -70,13 +70,16 @@ type Lang = 'en' | 'mr';
 const dictionary = {
   en: {
     appName: 'Store Inventory Management',
-    eyebrow: 'Store stock desk',
-    heroTitle: 'Multi-store inventory backed by Supabase',
+    eyebrow: 'Local store control room',
+    heroTitle: 'Run stock, sales, and closing count in one place',
     heroCopy:
-      "Owner admin can create shops, generate usernames and passwords, then track each shop's items, stock, daily sales, profit, and fast moving products separately.",
+      'For kirana, tapri, and small retail counters: record sales, see every product count, spot low stock, and manage each shop with its own login.',
     shopLogins: 'Shop logins',
-    cloudData: 'Cloud data',
-    profitView: 'Profit view',
+    cloudData: 'Live stock',
+    profitView: 'Restock list',
+    shopAccess: 'Owner + shop',
+    everyProduct: 'Every product',
+    lowStockFocus: 'Low-stock focus',
     adminLogin: 'Admin login',
     username: 'Username',
     password: 'Password',
@@ -140,13 +143,16 @@ const dictionary = {
   },
   mr: {
     appName: 'स्टोअर इन्व्हेंटरी व्यवस्थापन',
-    eyebrow: 'स्टोअर स्टॉक डेस्क',
-    heroTitle: 'Supabase सह मल्टी-स्टोअर इन्व्हेंटरी',
+    eyebrow: 'लोकल स्टोअर कंट्रोल रूम',
+    heroTitle: 'स्टॉक, विक्री आणि क्लोजिंग काउंट एकाच ठिकाणी',
     heroCopy:
-      'मालक अॅडमिन दुकाने तयार करू शकतो, युजरनेम आणि पासवर्ड जनरेट करू शकतो, आणि प्रत्येक दुकानाचा स्टॉक, विक्री, नफा आणि जलद विकली जाणारी उत्पादने वेगळी पाहू शकतो.',
+      'किराणा, टपरी आणि छोट्या दुकानांसाठी: विक्री नोंदवा, प्रत्येक उत्पादनाचा काउंट पाहा, कमी स्टॉक ओळखा आणि प्रत्येक दुकान स्वतंत्र लॉगिनने चालवा.',
     shopLogins: 'दुकान लॉगिन',
-    cloudData: 'क्लाउड डेटा',
-    profitView: 'नफा दृश्य',
+    cloudData: 'लाईव्ह स्टॉक',
+    profitView: 'रीस्टॉक यादी',
+    shopAccess: 'मालक + दुकान',
+    everyProduct: 'प्रत्येक उत्पादन',
+    lowStockFocus: 'कमी स्टॉक फोकस',
     adminLogin: 'अॅडमिन लॉगिन',
     username: 'युजरनेम',
     password: 'पासवर्ड',
@@ -642,29 +648,62 @@ export default function Home() {
   if (!session) {
     return (
       <main className="auth-shell min-h-screen bg-[#f8f7f2] text-[#20221f]">
-        <section className="auth-grid mx-auto grid min-h-screen max-w-6xl items-center gap-10 px-5 py-8 lg:grid-cols-[1.1fr_0.9fr]">
+        <section className="auth-grid mx-auto grid min-h-screen max-w-6xl items-center gap-10 px-5 py-8 lg:grid-cols-[1.08fr_0.92fr]">
           <div className="auth-copy">
             <div className="topline">
               <p className="text-sm font-semibold uppercase text-[#66735c]">{copy.eyebrow}</p>
               <LanguageToggle lang={lang} setLang={setLang} />
             </div>
-            <h1 className="mt-3 max-w-2xl text-4xl font-semibold leading-tight sm:text-6xl">
+            <h1 className="mt-4 max-w-2xl text-4xl font-medium leading-tight sm:text-6xl">
               {copy.heroTitle}
             </h1>
             <p className="mt-5 max-w-xl text-base leading-7 text-[#62655f]">
               {copy.heroCopy}
             </p>
-            <div className="mt-8 grid max-w-xl grid-cols-3 gap-3">
-              {[copy.shopLogins, copy.cloudData, copy.profitView].map((label) => (
-                <div key={label} className="feature-tile border border-[#d8d3c5] bg-white p-4">
-                  <p className="text-sm font-semibold">{label}</p>
+            <div className="mt-8 grid max-w-xl grid-cols-3 gap-3 landing-features">
+              {[
+                { label: copy.shopLogins, value: copy.shopAccess },
+                { label: copy.cloudData, value: copy.everyProduct },
+                { label: copy.profitView, value: copy.lowStockFocus },
+              ].map((feature) => (
+                <div key={feature.label} className="feature-tile border border-[#d8d3c5] bg-white p-4">
+                  <p className="text-sm font-medium">{feature.label}</p>
+                  <span>{feature.value}</span>
                 </div>
               ))}
+            </div>
+            <div className="landing-preview mt-8 max-w-xl border border-[#d8d3c5] bg-white p-4">
+              <div className="landing-preview-head">
+                <span>{copy.selectedShop}</span>
+                <strong>FC Road Store</strong>
+              </div>
+              <div className="landing-preview-grid">
+                <div>
+                  <span>{copy.todaySales}</span>
+                  <strong>Rs 0</strong>
+                </div>
+                <div>
+                  <span>{copy.unitsSold}</span>
+                  <strong>0 pcs</strong>
+                </div>
+                <div>
+                  <span>{copy.lowStockItems}</span>
+                  <strong>3</strong>
+                </div>
+              </div>
+              <div className="landing-preview-row">
+                <span>Classic Milds</span>
+                <strong>24 pcs</strong>
+              </div>
+              <div className="landing-preview-row is-alert">
+                <span>Pocket Lighter</span>
+                <strong>{copy.restock}</strong>
+              </div>
             </div>
           </div>
 
           <form onSubmit={handleLogin} className="auth-card border border-[#d8d3c5] bg-white p-6 shadow-sm">
-            <h2 className="text-2xl font-semibold">{copy.adminLogin}</h2>
+            <h2 className="text-2xl font-medium">{copy.adminLogin}</h2>
             {!isSupabaseConfigured ? (
               <p className="mt-4 rounded-lg border border-[#f0c7a5] bg-[#fff1df] px-3 py-2 text-sm text-[#8a3f20]">
                 {copy.configMissing}

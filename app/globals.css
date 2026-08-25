@@ -119,6 +119,8 @@ select:focus {
 .auth-copy h1 {
   letter-spacing: 0;
   text-wrap: balance;
+  font-size: clamp(2.7rem, 5.4vw, 4.65rem);
+  font-weight: 500;
 }
 
 .auth-copy p {
@@ -145,10 +147,97 @@ select:focus {
 .feature-tile {
   min-height: 76px;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 6px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.78)),
     var(--panel-solid);
+}
+
+.feature-tile span {
+  color: #6a6e66;
+  font-size: 0.78rem;
+}
+
+.landing-preview {
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.9)),
+    var(--panel-solid);
+}
+
+.landing-preview-head,
+.landing-preview-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.landing-preview-head {
+  color: #68705f;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
+.landing-preview-head strong {
+  color: #20221f;
+  font-size: 1rem;
+  font-weight: 500;
+  text-transform: none;
+}
+
+.landing-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin: 16px 0;
+  border: 1px solid #ded8ca;
+  background: #ded8ca;
+}
+
+.landing-preview-grid div {
+  background: #f8f7f2;
+  padding: 12px;
+}
+
+.landing-preview-grid span {
+  display: block;
+  color: #6a6e66;
+  font-size: 0.74rem;
+  margin-bottom: 7px;
+}
+
+.landing-preview-grid strong {
+  font-size: 1.15rem;
+  font-weight: 500;
+}
+
+.landing-preview-row {
+  border-top: 1px solid #ece8dd;
+  padding: 12px 2px 0;
+  color: #2d302c;
+  font-size: 0.92rem;
+}
+
+.landing-preview-row + .landing-preview-row {
+  margin-top: 12px;
+}
+
+.landing-preview-row strong {
+  color: #1f6d4f;
+  font-weight: 500;
+}
+
+.landing-preview-row.is-alert strong {
+  border: 1px solid #f1c2a9;
+  border-radius: 999px;
+  color: #8a3f20;
+  padding: 3px 9px;
+  font-size: 0.78rem;
 }
 
 .auth-card,
@@ -160,6 +249,11 @@ select:focus {
 
 .auth-card {
   animation: fadeUp 680ms 80ms ease both;
+}
+
+.auth-card input,
+.auth-card button {
+  border-radius: 8px;
 }
 
 .dashboard-header {
@@ -286,6 +380,11 @@ tbody tr:hover {
   .auth-grid {
     padding-top: 32px;
     padding-bottom: 32px;
+  }
+
+  .landing-features,
+  .landing-preview-grid {
+    grid-template-columns: 1fr;
   }
 
   .feature-tile {
