@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Store Inventory Management',
+  title: 'Quicko Commerce Product Dashboard',
   description:
-    'A multi-store inventory, daily sales, profit, generated login, and closing stock dashboard for store admins.',
+    'A screenshot-matched commerce inventory interface with product list metrics and a responsive product detail view.',
 };
 
 export default function RootLayout({
