@@ -70,16 +70,20 @@ type Lang = 'en' | 'mr';
 const dictionary = {
   en: {
     appName: 'Store Inventory Management',
-    eyebrow: 'Local store control room',
-    heroTitle: 'Run stock, sales, and closing count in one place',
+    eyebrow: 'Store stock desk',
+    heroTitle: 'Inventory, sales, and closing count for every shop',
     heroCopy:
-      'For kirana, tapri, and small retail counters: record sales, see every product count, spot low stock, and manage each shop with its own login.',
+      'A fast daily desk for kirana, tapri, and small retail teams: see every product count, record sales, catch low stock, and keep each shop separate.',
     shopLogins: 'Shop logins',
     cloudData: 'Live stock',
     profitView: 'Restock list',
     shopAccess: 'Owner + shop',
     everyProduct: 'Every product',
     lowStockFocus: 'Low-stock focus',
+    livePreview: 'Live store preview',
+    dailyClosing: 'Daily closing',
+    stockWatch: 'Stock watch',
+    secureAccess: 'Secure access',
     adminLogin: 'Admin login',
     username: 'Username',
     password: 'Password',
@@ -143,16 +147,20 @@ const dictionary = {
   },
   mr: {
     appName: 'स्टोअर इन्व्हेंटरी व्यवस्थापन',
-    eyebrow: 'लोकल स्टोअर कंट्रोल रूम',
-    heroTitle: 'स्टॉक, विक्री आणि क्लोजिंग काउंट एकाच ठिकाणी',
+    eyebrow: 'स्टोअर स्टॉक डेस्क',
+    heroTitle: 'प्रत्येक दुकानासाठी स्टॉक, विक्री आणि क्लोजिंग काउंट',
     heroCopy:
-      'किराणा, टपरी आणि छोट्या दुकानांसाठी: विक्री नोंदवा, प्रत्येक उत्पादनाचा काउंट पाहा, कमी स्टॉक ओळखा आणि प्रत्येक दुकान स्वतंत्र लॉगिनने चालवा.',
+      'किराणा, टपरी आणि छोट्या रिटेल टीमसाठी जलद डेली डेस्क: प्रत्येक उत्पादनाचा काउंट पाहा, विक्री नोंदवा, कमी स्टॉक पकडा आणि प्रत्येक दुकान वेगळे ठेवा.',
     shopLogins: 'दुकान लॉगिन',
     cloudData: 'लाईव्ह स्टॉक',
     profitView: 'रीस्टॉक यादी',
     shopAccess: 'मालक + दुकान',
     everyProduct: 'प्रत्येक उत्पादन',
     lowStockFocus: 'कमी स्टॉक फोकस',
+    livePreview: 'लाईव्ह स्टोअर प्रिव्ह्यू',
+    dailyClosing: 'डेली क्लोजिंग',
+    stockWatch: 'स्टॉक वॉच',
+    secureAccess: 'सुरक्षित अॅक्सेस',
     adminLogin: 'अॅडमिन लॉगिन',
     username: 'युजरनेम',
     password: 'पासवर्ड',
@@ -647,104 +655,134 @@ export default function Home() {
 
   if (!session) {
     return (
-      <main className="auth-shell min-h-screen bg-[#f8f7f2] text-[#20221f]">
-        <section className="auth-grid mx-auto grid min-h-screen max-w-6xl items-center gap-10 px-5 py-8 lg:grid-cols-[1.08fr_0.92fr]">
-          <div className="auth-copy">
-            <div className="topline">
-              <p className="text-sm font-semibold uppercase text-[#66735c]">{copy.eyebrow}</p>
+      <main className="auth-shell min-h-screen text-[#20221f]">
+        <section className="auth-grid mx-auto flex min-h-screen max-w-7xl flex-col px-5 py-5">
+          <div className="auth-topbar">
+            <div className="auth-brand">
+              <span className="auth-logo">SE</span>
+              <div>
+                <p>{copy.appName}</p>
+                <span>{copy.eyebrow}</span>
+              </div>
+            </div>
+            <div className="auth-actions">
               <LanguageToggle lang={lang} setLang={setLang} />
-            </div>
-            <h1 className="mt-4 max-w-2xl text-4xl font-medium leading-tight sm:text-6xl">
-              {copy.heroTitle}
-            </h1>
-            <p className="mt-5 max-w-xl text-base leading-7 text-[#62655f]">
-              {copy.heroCopy}
-            </p>
-            <div className="mt-8 grid max-w-xl grid-cols-3 gap-3 landing-features">
-              {[
-                { label: copy.shopLogins, value: copy.shopAccess },
-                { label: copy.cloudData, value: copy.everyProduct },
-                { label: copy.profitView, value: copy.lowStockFocus },
-              ].map((feature) => (
-                <div key={feature.label} className="feature-tile border border-[#d8d3c5] bg-white p-4">
-                  <p className="text-sm font-medium">{feature.label}</p>
-                  <span>{feature.value}</span>
-                </div>
-              ))}
-            </div>
-            <div className="landing-preview mt-8 max-w-xl border border-[#d8d3c5] bg-white p-4">
-              <div className="landing-preview-head">
-                <span>{copy.selectedShop}</span>
-                <strong>FC Road Store</strong>
-              </div>
-              <div className="landing-preview-grid">
-                <div>
-                  <span>{copy.todaySales}</span>
-                  <strong>Rs 0</strong>
-                </div>
-                <div>
-                  <span>{copy.unitsSold}</span>
-                  <strong>0 pcs</strong>
-                </div>
-                <div>
-                  <span>{copy.lowStockItems}</span>
-                  <strong>3</strong>
-                </div>
-              </div>
-              <div className="landing-preview-row">
-                <span>Classic Milds</span>
-                <strong>24 pcs</strong>
-              </div>
-              <div className="landing-preview-row is-alert">
-                <span>Pocket Lighter</span>
-                <strong>{copy.restock}</strong>
-              </div>
+              <span>{copy.secureAccess}</span>
             </div>
           </div>
 
-          <form onSubmit={handleLogin} className="auth-card border border-[#d8d3c5] bg-white p-6 shadow-sm">
-            <h2 className="text-2xl font-medium">{copy.adminLogin}</h2>
-            {!isSupabaseConfigured ? (
-              <p className="mt-4 rounded-lg border border-[#f0c7a5] bg-[#fff1df] px-3 py-2 text-sm text-[#8a3f20]">
-                {copy.configMissing}
+          <div className="auth-stage grid flex-1 items-center gap-7 lg:grid-cols-[1.05fr_0.95fr]">
+            <div className="auth-copy">
+              <p className="auth-kicker">{copy.livePreview}</p>
+              <h1>{copy.heroTitle}</h1>
+              <p className="auth-lede">{copy.heroCopy}</p>
+              <div className="landing-features">
+                {[
+                  { label: copy.shopLogins, value: copy.shopAccess },
+                  { label: copy.cloudData, value: copy.everyProduct },
+                  { label: copy.profitView, value: copy.lowStockFocus },
+                ].map((feature) => (
+                  <div key={feature.label} className="feature-tile">
+                    <p>{feature.label}</p>
+                    <span>{feature.value}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="landing-preview">
+                <div className="landing-preview-head">
+                  <span>{copy.selectedShop}</span>
+                  <strong>FC Road Store</strong>
+                </div>
+                <div className="landing-preview-grid">
+                  <div>
+                    <span>{copy.todaySales}</span>
+                    <strong>Rs 0</strong>
+                  </div>
+                  <div>
+                    <span>{copy.unitsSold}</span>
+                    <strong>0 pcs</strong>
+                  </div>
+                  <div>
+                    <span>{copy.lowStockItems}</span>
+                    <strong>3</strong>
+                  </div>
+                </div>
+                <div className="landing-preview-row">
+                  <span>Classic Milds</span>
+                  <strong>24 pcs</strong>
+                </div>
+                <div className="landing-preview-row is-alert">
+                  <span>Pocket Lighter</span>
+                  <strong>{copy.restock}</strong>
+                </div>
+              </div>
+            </div>
+
+            <div className="auth-panel-wrap">
+              <div className="auth-summary">
+                <div>
+                  <span>{copy.dailyClosing}</span>
+                  <strong>5 {copy.activeItems}</strong>
+                </div>
+                <div>
+                  <span>{copy.stockWatch}</span>
+                  <strong>3 {copy.restock}</strong>
+                </div>
+              </div>
+              <form onSubmit={handleLogin} className="auth-card">
+                <div className="auth-card-title">
+                  <div>
+                    <span>{copy.secureAccess}</span>
+                    <h2>{copy.adminLogin}</h2>
+                  </div>
+                  <span className="auth-status">{message || 'Ready'}</span>
+                </div>
+                {!isSupabaseConfigured ? (
+                  <p className="mt-4 rounded-lg border border-[#f0c7a5] bg-[#fff1df] px-3 py-2 text-sm text-[#8a3f20]">
+                    {copy.configMissing}
+                  </p>
+                ) : null}
+                <label className="mt-6 block text-sm font-medium" htmlFor="username">
+                  {copy.username}
+                </label>
+                <input
+                  id="username"
+                  name="username"
+                  required
+                  autoComplete="username"
+                  className="mt-2 w-full border border-[#cfc8b8] px-3 py-3 outline-none focus:border-[#2d6a4f]"
+                  placeholder="owner"
+                />
+                <label className="mt-4 block text-sm font-medium" htmlFor="password">
+                  {copy.password}
+                </label>
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  required
+                  autoComplete="current-password"
+                  className="mt-2 w-full border border-[#cfc8b8] px-3 py-3 outline-none focus:border-[#2d6a4f]"
+                  placeholder="owner123"
+                />
+                <button
+                  disabled={isBusy || !isSupabaseConfigured}
+                  className="mt-6 w-full bg-[#2d6a4f] px-4 py-3 font-semibold text-white disabled:opacity-60"
+                >
+                  {isBusy ? copy.opening : copy.openDashboard}
+                </button>
+                <p className="mt-4 text-sm text-[#62655f]">
+                  {copy.loginHint}
+                </p>
+                <p className="sr-only" role="status" aria-live="polite">
+                  {message}
+                </p>
+              </form>
+              <p className="auth-footnote">
+                {copy.todaySales} · {copy.todayProfit} · {copy.closingCount}
               </p>
-            ) : null}
-            <label className="mt-6 block text-sm font-medium" htmlFor="username">
-              {copy.username}
-            </label>
-            <input
-              id="username"
-              name="username"
-              required
-              autoComplete="username"
-              className="mt-2 w-full border border-[#cfc8b8] px-3 py-3 outline-none focus:border-[#2d6a4f]"
-              placeholder="owner"
-            />
-            <label className="mt-4 block text-sm font-medium" htmlFor="password">
-              {copy.password}
-            </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              required
-              autoComplete="current-password"
-              className="mt-2 w-full border border-[#cfc8b8] px-3 py-3 outline-none focus:border-[#2d6a4f]"
-              placeholder="owner123"
-            />
-            <button
-              disabled={isBusy || !isSupabaseConfigured}
-              className="mt-6 w-full bg-[#2d6a4f] px-4 py-3 font-semibold text-white disabled:opacity-60"
-            >
-              {isBusy ? copy.opening : copy.openDashboard}
-            </button>
-            <p className="mt-4 text-sm text-[#62655f]">
-              {copy.loginHint}
-            </p>
-            <p className="mt-2 text-sm text-[#8a3f20]" role="status" aria-live="polite">
-              {message}
-            </p>
-          </form>
+            </div>
+          </div>
         </section>
       </main>
     );
