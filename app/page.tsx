@@ -1,7 +1,9 @@
 'use client';
 
 import { createClient } from '@supabase/supabase-js';
-import { FormEvent, memo, useEffect, useMemo, useState } from 'react';
+import { FormEvent, memo, useEffect, useEffectEvent, useRef, useState } from 'react';
+import InventoryWorkspace from './inventory/InventoryWorkspace';
+import { money } from './inventory/domain';
 
 type Item = {
   id: string;
@@ -130,7 +132,7 @@ const dictionary = {
     shopName: 'Shop name',
     area: 'Area',
     generateLogin: 'Generate shop login',
-    newShopHint: 'New stores start with the standard inventory item list. Copy credentials when they appear here.',
+    newShopHint: 'New stores start empty. Add the products your shop actually sells.',
     manageShop: 'Manage selected shop',
     selectedShop: 'Selected shop',
     totalShops: 'Total shops',
@@ -239,7 +241,7 @@ const dictionary = {
     shopName: 'दुकानाचे नाव',
     area: 'एरिया',
     generateLogin: 'दुकान लॉगिन जनरेट करा',
-    newShopHint: 'नवीन दुकानांना स्टँडर्ड इन्व्हेंटरी यादी मिळेल. क्रेडेन्शियल्स दिसल्यावर कॉपी करा.',
+    newShopHint: 'नवीन दुकानात साठा रिकामा असेल. दुकानात विकली जाणारी उत्पादने जोडा.',
     manageShop: 'निवडलेले दुकान व्यवस्थापित करा',
     selectedShop: 'निवडलेले दुकान',
     totalShops: 'एकूण दुकाने',
@@ -296,8 +298,6 @@ const supabase = isSupabaseConfigured
 
 const sessionKey = 'store-inventory-session-v1';
 
-const money = (value: number) => `Rs ${Math.round(value).toLocaleString('en-IN')}`;
-const numeric = (value: FormDataEntryValue | null) => Number(value || 0);
 const cleanSlug = (value: string) =>
   value
     .toLowerCase()
@@ -305,7 +305,7 @@ const cleanSlug = (value: string) =>
     .replace(/(^-|-$)/g, '');
 
 function generatePassword() {
-  return `Store@${Math.floor(1000 + Math.random() * 9000)}`;
+  return `Store@${Array.from(crypto.getRandomValues(new Uint8Array(12)), n => n.toString(16).padStart(2, '0')).join('')}`;
 }
 
 function toNumber(value: unknown) {
@@ -362,60 +362,33 @@ export default function Home() {
   });
   const [dashboard, setDashboard] = useState<ShopDashboardData | null>(null);
   const [selectedShopId, setSelectedShopId] = useState('');
-  const [selectedItemId, setSelectedItemId] = useState('');
+  const shopRequest = useRef(0);
+  const [ownerOpen, setOwnerOpen] = useState(false);
   const [message, setMessage] = useState('Ready for today');
   const [credentialNote, setCredentialNote] = useState<CredentialNote | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [lang, setLang] = useState<Lang>('en');
+  function changeLanguage(value: Lang) { setLang(value); window.localStorage.setItem('store-language', value); }
+  useEffect(() => { document.documentElement.lang = lang; }, [lang]);
   const copy = dictionary[lang];
 
-  useEffect(() => {
+  const restorePreferences = useEffectEvent(() => {
+    setLang(window.localStorage.getItem('store-language') === 'mr' ? 'mr' : 'en');
     const saved = window.localStorage.getItem(sessionKey);
     if (!saved) return;
 
     try {
       const parsed = JSON.parse(saved) as Session;
+      if (!parsed.token || !['owner', 'shop'].includes(parsed.role) || (parsed.role === 'shop' && !parsed.shopId)) throw new Error('Invalid saved session');
       setSession(parsed);
       void loadAfterLogin(parsed);
     } catch {
       window.localStorage.removeItem(sessionKey);
     }
-  }, []);
-
-  const selectedItem = dashboard?.items.find((item) => item.id === selectedItemId) ?? dashboard?.items[0];
-
-  useEffect(() => {
-    if (!dashboard?.items.some((item) => item.id === selectedItemId)) {
-      setSelectedItemId(dashboard?.items[0]?.id ?? '');
-    }
-  }, [dashboard, selectedItemId]);
-
-  const metrics = useMemo(() => {
-    const items = dashboard?.items ?? [];
-    const todaysSales = dashboard?.todaysSales ?? [];
-    const revenue = todaysSales.reduce((sum, sale) => sum + sale.soldPrice * sale.qty, 0);
-    const profit = todaysSales.reduce(
-      (sum, sale) => sum + (sale.soldPrice - sale.buyingPrice) * sale.qty,
-      0,
-    );
-    const units = todaysSales.reduce((sum, sale) => sum + sale.qty, 0);
-    const lowStock = items.filter((item) => item.stock <= item.reorderLevel);
-
-    const byProduct = todaysSales.reduce<Record<string, number>>((acc, sale) => {
-      acc[sale.itemName] = (acc[sale.itemName] ?? 0) + sale.qty;
-      return acc;
-    }, {});
-    const topSeller = Object.entries(byProduct).sort((a, b) => b[1] - a[1])[0];
-
-    return {
-      revenue,
-      profit,
-      units,
-      lowStock,
-      topSeller: topSeller ? `${topSeller[0]} (${topSeller[1]} ${copy.unitPcs})` : copy.noSales,
-      todaysSales,
-    };
-  }, [copy.noSales, copy.unitPcs, dashboard]);
+  });
+  // Restore external browser storage once after hydration; the server cannot read it.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { restorePreferences(); }, []);
 
   async function loadAfterLogin(nextSession: Session) {
     try {
@@ -464,6 +437,7 @@ export default function Home() {
       : shopRows[0]?.id ?? '';
     setSelectedShopId(nextShopId);
     if (nextShopId) await loadShop(token, nextShopId);
+    else { setDashboard(null); setOwnerOpen(true); }
   }
 
   async function loadOwnerSummary(token: string) {
@@ -479,10 +453,12 @@ export default function Home() {
   }
 
   async function loadShop(token: string, shopId: string) {
+    const request = ++shopRequest.current;
     const { data, error } = await getSupabaseClient().rpc('get_shop_dashboard', {
       p_token: token,
       p_shop_id: shopId,
     });
+    if (request !== shopRequest.current) return;
     const raw = getRpcData<Record<string, unknown>>(data, error);
     const shop = raw.shop as Record<string, unknown>;
     const items = (raw.items as Record<string, unknown>[]).map(mapItem);
@@ -499,14 +475,15 @@ export default function Home() {
       todaysSales,
     });
     setSelectedShopId(String(shop.id));
-    setSelectedItemId(items[0]?.id ?? '');
+    setShops(current => current.map(account => account.id === String(shop.id) ? { ...account, itemCount: items.length } : account));
+
   }
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const username = String(form.get('username') || '').trim();
-    const password = String(form.get('password') || '').trim();
+    const password = String(form.get('password') || '');
 
     try {
       setIsBusy(true);
@@ -531,21 +508,34 @@ export default function Home() {
     }
   }
 
+  async function selectShop(shopId: string) {
+    if (!session || isBusy) return;
+    setIsBusy(true);
+    setDashboard(null);
+    try { await loadOwner(session.token, shopId); }
+    catch (error) { setMessage(error instanceof Error ? error.message : copy.loading); }
+    finally { setIsBusy(false); }
+  }
+
   async function handleLogout() {
-    if (session?.token) {
-      await getSupabaseClient().rpc('logout_user', { p_token: session.token });
-    }
+    const token = session?.token;
+    shopRequest.current += 1;
     setSession(null);
     setDashboard(null);
     setCredentialNote(null);
     window.localStorage.removeItem(sessionKey);
+    if (token) {
+      try { await getSupabaseClient().rpc('logout_user', { p_token: token }); }
+      catch { /* Local sign-out still completes if the network is unavailable. */ }
+    }
   }
 
   async function handleAddShop(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!session) return;
 
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const name = String(form.get('shopName') || '').trim();
     if (!name) return;
 
@@ -570,7 +560,7 @@ export default function Home() {
         password: String(shop.password),
       });
       setMessage(`${shop.name} created`);
-      event.currentTarget.reset();
+      formElement.reset();
       await loadOwner(session.token, shopId);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not create shop');
@@ -604,118 +594,6 @@ export default function Home() {
     }
   }
 
-  async function handleAddItem(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!session || !dashboard) return;
-
-    const form = new FormData(event.currentTarget);
-    const name = String(form.get('name') || '').trim();
-    if (!name) return;
-
-    try {
-      setIsBusy(true);
-      const { data, error } = await getSupabaseClient().rpc('add_item', {
-        p_token: session.token,
-        p_shop_id: dashboard.shop.id,
-        p_name: name,
-        p_category: String(form.get('category') || 'General').trim() || 'General',
-        p_buying_price: numeric(form.get('buyingPrice')),
-        p_selling_price: numeric(form.get('sellingPrice')),
-        p_stock: numeric(form.get('stock')),
-        p_reorder_level: numeric(form.get('reorderLevel')),
-      });
-      const item = mapItem(getRpcData<Record<string, unknown>>(data, error));
-      setSelectedItemId(item.id);
-      setMessage(`${item.name} added to ${dashboard.shop.name}`);
-      event.currentTarget.reset();
-      setDashboard((current) =>
-        current
-          ? {
-              ...current,
-              items: [...current.items, item],
-            }
-          : current,
-      );
-      setShops((current) =>
-        current.map((shop) =>
-          shop.id === dashboard.shop.id ? { ...shop, itemCount: shop.itemCount + 1 } : shop,
-        ),
-      );
-      if (session.role === 'owner') await loadOwnerSummary(session.token);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not add item');
-    } finally {
-      setIsBusy(false);
-    }
-  }
-
-  async function handleRecordSale(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!session || !dashboard || !selectedItem) return;
-
-    const form = new FormData(event.currentTarget);
-    try {
-      setIsBusy(true);
-      const { data, error } = await getSupabaseClient().rpc('record_sale', {
-        p_token: session.token,
-        p_shop_id: dashboard.shop.id,
-        p_item_id: selectedItem.id,
-        p_qty: Math.max(1, numeric(form.get('qty'))),
-        p_sold_price: Math.max(0, numeric(form.get('soldPrice'))),
-      });
-      const rawSale = getRpcData<Record<string, unknown>>(data, error);
-      const sale = mapSale(rawSale);
-      const remainingStock = toNumber(rawSale.remainingStock);
-      setMessage(`Sold ${sale.qty} ${sale.itemName} at ${dashboard.shop.name}`);
-      event.currentTarget.reset();
-      setDashboard((current) =>
-        current
-          ? {
-              ...current,
-              items: current.items.map((item) =>
-                item.id === selectedItem.id ? { ...item, stock: remainingStock } : item,
-              ),
-              todaysSales: [sale, ...current.todaysSales],
-            }
-          : current,
-      );
-      if (session.role === 'owner') await loadOwnerSummary(session.token);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not record sale');
-    } finally {
-      setIsBusy(false);
-    }
-  }
-
-  async function updateClosingCount(itemId: string, stock: number) {
-    if (!session) return;
-
-    try {
-      setIsBusy(true);
-      const { data, error } = await getSupabaseClient().rpc('update_stock', {
-        p_token: session.token,
-        p_item_id: itemId,
-        p_stock: stock,
-      });
-      if (error) throw new Error(error.message);
-      const updatedItem = mapItem(getRpcData<Record<string, unknown>>(data, null));
-      setMessage('Closing stock updated');
-      setDashboard((current) =>
-        current
-          ? {
-              ...current,
-              items: current.items.map((item) => (item.id === itemId ? updatedItem : item)),
-            }
-          : current,
-      );
-      if (session.role === 'owner') await loadOwnerSummary(session.token);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not update stock');
-    } finally {
-      setIsBusy(false);
-    }
-  }
-
   if (!session) {
     return (
       <main className="auth-shell min-h-screen text-[#20221f]">
@@ -729,7 +607,7 @@ export default function Home() {
               </div>
             </div>
             <div className="auth-actions">
-              <LanguageToggle lang={lang} setLang={setLang} />
+              <LanguageToggle lang={lang} setLang={changeLanguage} />
               <span>{copy.secureAccess}</span>
             </div>
           </div>
@@ -782,17 +660,7 @@ export default function Home() {
             </div>
 
             <div className="auth-panel-wrap">
-              <div className="auth-summary">
-                <div>
-                  <span>{copy.dailyClosing}</span>
-                  <strong>5 {copy.activeItems}</strong>
-                </div>
-                <div>
-                  <span>{copy.stockWatch}</span>
-                  <strong>3 {copy.restock}</strong>
-                </div>
-              </div>
-              <form onSubmit={handleLogin} className="auth-card">
+                            <form onSubmit={handleLogin} className="auth-card">
                 <div className="auth-card-title">
                   <div>
                     <span>{copy.secureAccess}</span>
@@ -826,7 +694,7 @@ export default function Home() {
                   required
                   autoComplete="current-password"
                   className="mt-2 w-full border border-[#cfc8b8] px-3 py-3 outline-none focus:border-[#2d6a4f]"
-                  placeholder="owner123"
+                  placeholder=""
                 />
                 <button
                   disabled={isBusy || !isSupabaseConfigured}
@@ -852,17 +720,17 @@ export default function Home() {
   }
 
   return (
-    <main className="dashboard-shell min-h-screen bg-[#f8f7f2] text-[#20221f]">
+    <main className="dashboard-shell min-h-screen">
       <header className="dashboard-header border-b border-[#ddd7c7] bg-white">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-5 py-4">
           <div>
             <p className="text-xs font-semibold uppercase text-[#66735c]">{copy.appName}</p>
             <h1 className="text-2xl font-semibold">
-              {session.role === 'owner' ? copy.ownerDashboard : `${dashboard?.shop.name ?? 'Shop'} Dashboard`}
+              {session.role === 'owner' ? copy.ownerDashboard : copy.inventoryControl}
             </h1>
           </div>
           <div className="flex items-center gap-3 text-sm">
-            <LanguageToggle lang={lang} setLang={setLang} />
+            <LanguageToggle lang={lang} setLang={changeLanguage} />
             <span className="border border-[#d8d3c5] bg-[#f8f7f2] px-3 py-2">
               {isBusy ? copy.syncing : message === 'Ready for today' ? copy.readyForToday : message}
             </span>
@@ -873,9 +741,10 @@ export default function Home() {
         </div>
       </header>
 
-      <section className="mx-auto max-w-7xl px-5 py-6">
+      <section className="workspace-container">
         {session.role === 'owner' ? (
-          <>
+          <details className="owner-controls" open={ownerOpen} onToggle={e => setOwnerOpen(e.currentTarget.open)}><summary>{copy.shopAccounts}</summary>
+            <p role="status" className="mb-4 text-sm">{isBusy ? copy.syncing : message === 'Ready for today' ? copy.readyForToday : message}</p>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
               <Metric label={copy.totalShops} value={`${ownerSummary.shopCount}`} />
               <Metric label={copy.todaySales} value={money(ownerSummary.revenue)} />
@@ -912,7 +781,8 @@ export default function Home() {
                             <div className="flex gap-2">
                               <button
                                 type="button"
-                                onClick={() => void loadOwner(session.token, shop.id)}
+                                disabled={isBusy}
+                                onClick={() => void selectShop(shop.id)}
                                 className="border border-[#2d6a4f] px-3 py-2 text-[#2d6a4f]"
                               >
                                 {copy.view}
@@ -920,6 +790,7 @@ export default function Home() {
                               <button
                                 type="button"
                                 onClick={() => void resetShopPassword(shop.id)}
+                                disabled={isBusy}
                                 className="border border-[#8a3f20] px-3 py-2 text-[#8a3f20]"
                               >
                                 {copy.reset}
@@ -965,7 +836,8 @@ export default function Home() {
                 </div>
                 <select
                   value={selectedShopId}
-                  onChange={(event) => void loadOwner(session.token, event.target.value)}
+                  disabled={isBusy}
+                  onChange={event => void selectShop(event.target.value)}
                   className="border border-[#cfc8b8] px-3 py-3"
                 >
                   {shops.map((shop) => (
@@ -976,337 +848,32 @@ export default function Home() {
                 </select>
               </div>
             </div>
-          </>
+          </details>
         ) : null}
 
         {dashboard ? (
-          <ShopDashboard
-            dashboard={dashboard}
-            copy={copy}
-            selectedItemId={selectedItemId}
-            selectedItem={selectedItem}
-            metrics={metrics}
-            setSelectedItemId={setSelectedItemId}
-            handleRecordSale={handleRecordSale}
-            handleAddItem={handleAddItem}
-            updateClosingCount={updateClosingCount}
+          <InventoryWorkspace
+            key={dashboard.shop.id}
+            data={dashboard}
+            lang={lang}
+            rpc={async (name, args) => {
+              const { data, error } = await getSupabaseClient().rpc(name, { ...args, p_token: session.token });
+              if (error) throw new Error(`${error.code}: ${error.message}`);
+              return data;
+            }}
+            refresh={async () => {
+              await loadShop(session.token, dashboard.shop.id);
+              if (session.role === 'owner') await loadOwnerSummary(session.token);
+            }}
           />
         ) : (
-          <section className="panel mt-6 border border-[#d8d3c5] bg-white p-6">{copy.loading}</section>
+          <section className="workspace-empty" role="status">{isBusy ? copy.loading : shops.length === 0 && session.role === 'owner' ? copy.addNewShop : message}
+            {!isBusy && <button onClick={() => void loadAfterLogin(session)}>{lang === 'mr' ? 'पुन्हा प्रयत्न करा' : 'Retry'}</button>}
+          </section>
         )}
       </section>
     </main>
   );
-}
-
-function ShopDashboard({
-  dashboard,
-  copy,
-  selectedItemId,
-  selectedItem,
-  metrics,
-  setSelectedItemId,
-  handleRecordSale,
-  handleAddItem,
-  updateClosingCount,
-}: {
-  dashboard: ShopDashboardData;
-  copy: (typeof dictionary)[Lang];
-  selectedItemId: string;
-  selectedItem?: Item;
-  metrics: {
-    revenue: number;
-    profit: number;
-    units: number;
-    lowStock: Item[];
-    topSeller: string;
-    todaysSales: Sale[];
-  };
-  setSelectedItemId: (id: string) => void;
-  handleRecordSale: (event: FormEvent<HTMLFormElement>) => void;
-  handleAddItem: (event: FormEvent<HTMLFormElement>) => void;
-  updateClosingCount: (itemId: string, stock: number) => void;
-}) {
-  const [query, setQuery] = useState('');
-  const [sortMode, setSortMode] = useState<'name' | 'stock' | 'sold' | 'profit' | 'restock'>('restock');
-  const allCategoryLabel = copy.allInventory;
-  const [categoryFilter, setCategoryFilter] = useState(allCategoryLabel);
-  const [showOnlyRestock, setShowOnlyRestock] = useState(false);
-  const salesByItem = useMemo(() => {
-    return metrics.todaysSales.reduce<Record<string, { qty: number; revenue: number; profit: number }>>((acc, sale) => {
-      const key = sale.itemId ?? sale.itemName;
-      acc[key] = acc[key] ?? { qty: 0, revenue: 0, profit: 0 };
-      acc[key].qty += sale.qty;
-      acc[key].revenue += sale.qty * sale.soldPrice;
-      acc[key].profit += sale.qty * (sale.soldPrice - sale.buyingPrice);
-      return acc;
-    }, {});
-  }, [metrics.todaysSales]);
-  const filteredItems = useMemo(() => {
-    return dashboard.items
-      .filter((item) => item.name.toLowerCase().includes(query.toLowerCase()))
-      .filter((item) => (categoryFilter === allCategoryLabel ? true : item.category === categoryFilter))
-      .filter((item) => (showOnlyRestock ? item.stock <= item.reorderLevel : true))
-      .sort((a, b) => {
-        if (sortMode === 'stock') return b.stock - a.stock;
-        if (sortMode === 'sold') return (salesByItem[b.id]?.qty ?? 0) - (salesByItem[a.id]?.qty ?? 0);
-        if (sortMode === 'profit') return (salesByItem[b.id]?.profit ?? 0) - (salesByItem[a.id]?.profit ?? 0);
-        if (sortMode === 'restock') return restockPriority(b) - restockPriority(a);
-        return a.name.localeCompare(b.name);
-      });
-  }, [allCategoryLabel, categoryFilter, dashboard.items, query, salesByItem, showOnlyRestock, sortMode]);
-  const winningItem = [...dashboard.items].sort((a, b) => (salesByItem[b.id]?.qty ?? 0) - (salesByItem[a.id]?.qty ?? 0))[0];
-  const stockValue = dashboard.items.reduce((sum, item) => sum + item.stock * item.buyingPrice, 0);
-  const categories = [allCategoryLabel, ...Array.from(new Set(dashboard.items.map((item) => item.category)))];
-
-  return (
-    <>
-      <section className="commerce-dashboard mt-6">
-        <aside className="commerce-sidebar">
-          <div className="side-brand">
-            <span className="status-dot" />
-            <p>{copy.storeControl}</p>
-          </div>
-          <button type="button" className="side-link" onClick={() => setSortMode('sold')}>⌁ <span>{copy.todaySales}</span></button>
-          <button type="button" className="side-link" onClick={() => setShowOnlyRestock(true)}>♧ <span>{copy.lowStockItems}</span><b>{metrics.lowStock.length}</b></button>
-          <button type="button" className="side-link active" onClick={() => setSortMode('restock')}>◎ <span>{copy.restockPriority}</span></button>
-          <button type="button" className="side-link" onClick={() => setSortMode('profit')}>▥ <span>{copy.todayProfit}</span><em>{money(metrics.profit)}</em></button>
-          <p className="side-title">{copy.productSection}</p>
-          <button type="button" className="side-link selected" onClick={() => { setCategoryFilter(allCategoryLabel); setShowOnlyRestock(false); }}>▰ <span>{copy.allInventory}</span></button>
-          <button type="button" className="side-link" onClick={() => setSortMode('stock')}>♨ <span>{copy.stockCount}</span></button>
-          <button type="button" className="side-link" onClick={() => setSortMode('sold')}>◌ <span>{copy.fastMoving}</span></button>
-          <button type="button" className="side-link" onClick={() => setSortMode('name')}>◇ <span>{copy.catalog}</span></button>
-          <p className="side-title">{copy.myStore}</p>
-          <div className="category-block">
-            <div className="category-heading">▧ {copy.category} <span>⌃</span></div>
-            {categories.slice(1).map((name, index) => (
-              <button key={name} type="button" onClick={() => setCategoryFilter(name)}>
-                <i style={{ background: ['#ff5555', '#4968ff', '#23b44d'][index] }} />
-                {name}
-                <b>• {dashboard.items.filter((item) => item.category === name).length}</b>
-              </button>
-            ))}
-          </div>
-          <button type="button" className="side-link" onClick={() => setSortMode('profit')}>♧ <span>{copy.todayProfit}</span></button>
-          <button type="button" className="side-link" onClick={() => setShowOnlyRestock(false)}>♙ <span>{copy.dailyClosingPanel}</span></button>
-        </aside>
-
-        <section className="commerce-main">
-          <header className="commerce-topbar">
-            <h2>{copy.inventoryControl}</h2>
-            <label className="commerce-search">
-              <span>⌕</span>
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={copy.searchProduct}
-                aria-label={copy.searchProduct}
-              />
-            </label>
-            <select
-              value={sortMode}
-              onChange={(event) => setSortMode(event.target.value as 'name' | 'stock' | 'sold' | 'profit' | 'restock')}
-              aria-label={copy.sortProducts}
-            >
-              <option value="restock">{copy.restock}</option>
-              <option value="stock">{copy.stock}</option>
-              <option value="sold">{copy.soldToday}</option>
-              <option value="profit">{copy.todayProfit}</option>
-              <option value="name">{copy.itemName}</option>
-            </select>
-            <button type="button" onClick={() => setShowOnlyRestock((value) => !value)}>
-              ▣ {showOnlyRestock ? copy.showAllItems : copy.needsRestock} <span>{metrics.lowStock.length}</span>
-            </button>
-          </header>
-
-          <section className="commerce-stats">
-            <h3>{copy.storeSnapshot}</h3>
-            <div>
-              <CommerceStat label={copy.inventoryItems} value={String(dashboard.items.length)} suffix={copy.product} />
-              <CommerceStat label={copy.stockValue} value={money(stockValue)} />
-              <CommerceStat label={copy.lowStockItems} value={String(metrics.lowStock.length)} suffix={copy.item} />
-              <CommerceStat label={copy.highestSeller} value={metrics.topSeller === copy.noSales ? winningItem?.name ?? copy.noItem : metrics.topSeller} />
-            </div>
-          </section>
-
-          <div className="commerce-products">
-            {filteredItems.map((item) => {
-              const saleStats = salesByItem[item.id] ?? salesByItem[item.name] ?? { qty: 0, revenue: 0, profit: 0 };
-              const restock = item.stock <= item.reorderLevel;
-              return (
-                <article key={item.id} className="commerce-row">
-                  <div className="commerce-product">
-                    <div className="item-initial" aria-hidden="true">{item.name.slice(0, 1)}</div>
-                    <div>
-                      <h4>{item.name}</h4>
-                      <p>{item.category}</p>
-                    </div>
-                  </div>
-                  <div className="commerce-performance">
-                    <p>{copy.soldToday} <span>{saleStats.qty} {copy.unitPcs}</span></p>
-                    <div>
-                      <span>{copy.revenueLabel} {money(saleStats.revenue)}</span>
-                      <span>{copy.profitLabel} {money(saleStats.profit)}</span>
-                    </div>
-                  </div>
-                  <div className="commerce-info">
-                    <p>{copy.availableQty}</p>
-                    <span>◇ {item.stock} {copy.unitPcs}</span>
-                  </div>
-                  <div className="commerce-info">
-                    <p>{copy.sellBuy}</p>
-                    <span>{money(item.defaultSellingPrice)} / {money(item.buyingPrice)}</span>
-                  </div>
-                  <div className="commerce-visible">
-                    <p>{copy.restock}</p>
-                    <span className={restock ? 'restock-pill alert' : 'restock-pill'}>{restock ? copy.needed : copy.ok}</span>
-                  </div>
-                  <div className="commerce-actions">
-                    <input
-                      aria-label={`${copy.availableQty} for ${item.name}`}
-                      type="number"
-                      min="0"
-                      defaultValue={item.stock}
-                      onBlur={(event) => {
-                        const nextStock = Number(event.target.value);
-                        if (nextStock !== item.stock) void updateClosingCount(item.id, nextStock);
-                      }}
-                    />
-                    <button type="button" aria-label={`${copy.chooseItem} ${item.name}`} onClick={() => setSelectedItemId(item.id)}>
-                      {copy.view}
-                    </button>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        </section>
-      </section>
-
-      <div className="management-strip mt-5 grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
-        <section className="panel border border-[#d8d3c5] bg-white p-4">
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              const form = new FormData(event.currentTarget);
-              const itemId = String(form.get('itemId') || selectedItemId);
-              const stock = Number(form.get('availableQty'));
-              if (itemId && Number.isFinite(stock)) void updateClosingCount(itemId, stock);
-            }}
-          >
-            <h2 className="text-lg font-semibold">{copy.updateQty}</h2>
-            <p className="mt-2 text-sm text-[#62655f]">{copy.qtyHint}</p>
-            <label className="mt-4 block text-sm font-medium" htmlFor="sale-item">
-              {copy.chooseItem}
-            </label>
-            <select
-              id="sale-item"
-              name="itemId"
-              value={selectedItemId}
-              onChange={(event) => setSelectedItemId(event.target.value)}
-              className="mt-2 w-full border border-[#cfc8b8] px-3 py-3"
-            >
-              {dashboard.items.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name} - {item.stock} {copy.pcsLeft}
-                </option>
-              ))}
-            </select>
-            <Field
-              key={selectedItemId}
-              label={copy.availableQty}
-              name="availableQty"
-              type="number"
-              defaultValue={String(selectedItem?.stock ?? 0)}
-            />
-            <button className="mt-4 w-full bg-[#2d6a4f] px-4 py-3 font-semibold text-white">
-              {copy.updateQty}
-            </button>
-          </form>
-        </section>
-
-        <form onSubmit={handleAddItem} className="panel border border-[#d8d3c5] bg-white p-4">
-          <h2 className="text-lg font-semibold">{copy.addItem}</h2>
-          <p className="mt-2 text-sm text-[#62655f]">{copy.addProductHint}</p>
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            <Field label={copy.itemName} name="name" required />
-            <Field label={copy.category} name="category" defaultValue="General" required />
-            <Field label={copy.buyingPrice} name="buyingPrice" type="number" required />
-            <Field label={copy.sellingPrice} name="sellingPrice" type="number" required />
-            <Field label={copy.totalQty} name="stock" type="number" required />
-            <Field label={copy.restockAlert} name="reorderLevel" type="number" defaultValue="5" />
-          </div>
-          <button className="mt-4 w-full border border-[#2d6a4f] px-4 py-3 font-semibold text-[#2d6a4f]">
-            {copy.addItemAction}
-          </button>
-        </form>
-      </div>
-
-      <div className="mt-5 grid gap-5 lg:grid-cols-2">
-        <section className="panel border border-[#d8d3c5] bg-white p-4">
-          <h2 className="text-lg font-semibold">{copy.lowStockAnalysis}</h2>
-          <div className="mt-3 space-y-2">
-            {metrics.lowStock.length ? (
-              metrics.lowStock.map((item) => (
-                <div key={item.id} className="flex items-center justify-between bg-[#fbf1e8] px-3 py-2 text-sm">
-                  <span>{item.name}</span>
-                  <span>{item.stock} {copy.pcsLeft}</span>
-                </div>
-              ))
-            ) : (
-              <p className="text-sm text-[#62655f]">{copy.noLowStock}</p>
-            )}
-          </div>
-        </section>
-
-        <section className="panel border border-[#d8d3c5] bg-white p-4">
-          <h2 className="text-lg font-semibold">{copy.todaySalesLog}</h2>
-          <div className="mt-3 max-h-64 space-y-2 overflow-auto">
-            {metrics.todaysSales.length ? (
-              metrics.todaysSales.map((sale) => (
-                <div key={sale.id} className="grid grid-cols-[1fr_auto] gap-3 border-b border-[#eee9dc] pb-2 text-sm">
-                  <span>
-                    {sale.itemName} x {sale.qty}
-                  </span>
-                  <span>{money(sale.soldPrice * sale.qty)}</span>
-                </div>
-              ))
-            ) : (
-              <p className="text-sm text-[#62655f]">{copy.noSales}</p>
-            )}
-          </div>
-        </section>
-      </div>
-    </>
-  );
-}
-
-function CommerceStat({
-  label,
-  value,
-  suffix,
-  gauge,
-}: {
-  label: string;
-  value: string;
-  suffix?: string;
-  gauge?: boolean;
-}) {
-  return (
-    <article className="commerce-stat">
-      <p>{label}</p>
-      <strong>
-        {gauge ? <span className="tiny-gauge" /> : null}
-        {value}
-        {suffix ? <em>{suffix}</em> : null}
-      </strong>
-    </article>
-  );
-}
-
-function restockPriority(item: Item) {
-  if (item.stock <= item.reorderLevel) return 1000 + (item.reorderLevel - item.stock);
-  return Math.max(0, item.reorderLevel * 4 - item.stock);
 }
 
 const Metric = memo(function Metric({ label, value }: { label: string; value: string }) {

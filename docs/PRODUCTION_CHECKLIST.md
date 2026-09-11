@@ -32,7 +32,7 @@ Do not add the direct Postgres connection string or database password to Vercel 
 
 - Replace custom password login with Supabase Auth or OTP.
 - Add first-login password reset.
-- Add `stock_adjustments` audit table.
+- Verify `stock_adjustments` audit records after physical counting.
 - Add date-range reports and daily metric rollups.
 - Add Playwright end-to-end tests.
 - Add offline queue for sales entry.

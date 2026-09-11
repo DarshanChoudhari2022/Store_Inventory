@@ -31,7 +31,7 @@ For Vercel, add the same two variables in Project Settings > Environment Variabl
 - Owner admin login and shop-specific login.
 - Multiple shop creation.
 - Generated username/password for each shop.
-- Seed inventory for cigarettes, Vimal, pan masala, and accessories.
+- Empty inventory for new shops, with category suggestions for shop items.
 - Custom item creation.
 - Sold product entry with actual sold price.
 - Daily revenue, profit, units sold, stock value, and highest seller.
@@ -39,10 +39,7 @@ For Vercel, add the same two variables in Project Settings > Environment Variabl
 - Closing stock update.
 - Supabase Postgres persistence through RPC functions.
 
-Demo credentials:
-
-- Owner: `owner` / `owner123`
-- Shop: `fcroad.admin` / `Store@4217`
+Existing shop and owner credentials are preserved. No default credentials are created by setup.
 
 ## Supabase Setup
 
@@ -52,4 +49,6 @@ Run the database setup with a local `DATABASE_URL` environment variable:
 npm run setup:supabase
 ```
 
-The setup creates tables, seed data, row-level security, and the RPC functions used by the browser app.
+The setup applies both SQL files in a transaction, preserving records and credentials. It adds validated sales, product edit/delete, audited stock updates, and row-level security.
+
+See [Inventory redesign and database setup](docs/INVENTORY_REDESIGN.md) for the UI audit, new workflows, environment configuration, and verification limits. Run `npm test` for the inventory regression suite.

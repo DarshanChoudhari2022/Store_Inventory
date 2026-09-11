@@ -36,7 +36,7 @@ create table if not exists sales (
   qty integer not null check (qty > 0),
   buying_price numeric(12, 2) not null default 0,
   sold_price numeric(12, 2) not null default 0,
-  sale_date date not null default current_date,
+  sale_date date not null default (now() at time zone 'Asia/Kolkata')::date,
   created_at timestamptz not null default now()
 );
 
@@ -189,8 +189,8 @@ begin
 
   select jsonb_build_object(
     'shopCount', (select count(*) from shops),
-    'revenue', coalesce((select sum(sold_price * qty) from sales where sale_date = current_date), 0),
-    'profit', coalesce((select sum((sold_price - buying_price) * qty) from sales where sale_date = current_date), 0),
+    'revenue', coalesce((select sum(sold_price * qty) from sales where sale_date = (now() at time zone 'Asia/Kolkata')::date), 0),
+    'profit', coalesce((select sum((sold_price - buying_price) * qty) from sales where sale_date = (now() at time zone 'Asia/Kolkata')::date), 0),
     'inventoryValue', coalesce((select sum(stock * buying_price) from items), 0),
     'lowStockCount', (select count(*) from items where stock <= reorder_level)
   )
@@ -250,7 +250,7 @@ begin
         order by sale.created_at desc
       )
       from sales sale
-      where sale.shop_id = s.id and sale.sale_date = current_date
+      where sale.shop_id = s.id and sale.sale_date = (now() at time zone 'Asia/Kolkata')::date
     ), '[]'::jsonb)
   )
   into result
@@ -280,17 +280,11 @@ begin
     raise exception 'Owner access required';
   end if;
 
+  if p_name is null or length(trim(p_name)) not between 1 and 120
+    or p_password is null or length(p_password) < 12 then raise exception 'VALIDATION'; end if;
   insert into shops(name, area, username, password_hash)
   values (p_name, coalesce(nullif(p_area, ''), 'Pune'), p_username, crypt(p_password, gen_salt('bf')))
   returning * into new_shop;
-
-  insert into items(shop_id, name, category, buying_price, default_selling_price, stock, reorder_level)
-  values
-    (new_shop.id, 'Gold Flake Kings', 'Cigarettes', 17, 20, 38, 12),
-    (new_shop.id, 'Classic Milds', 'Cigarettes', 18, 22, 24, 10),
-    (new_shop.id, 'Vimal Pouch', 'Pan Masala', 4, 5, 82, 25),
-    (new_shop.id, 'Rajnigandha', 'Pan Masala', 18, 20, 18, 8),
-    (new_shop.id, 'Pocket Lighter', 'Accessories', 8, 12, 17, 6);
 
   return jsonb_build_object(
     'id', new_shop.id,
@@ -315,6 +309,8 @@ begin
     raise exception 'Owner access required';
   end if;
 
+  if p_password is null or length(p_password) < 12 then raise exception 'VALIDATION'; end if;
+  delete from app_sessions where shop_id = p_shop_id;
   update shops
   set password_hash = crypt(p_password, gen_salt('bf'))
   where id = p_shop_id
@@ -350,6 +346,14 @@ begin
   if not can_access_shop(p_token, p_shop_id) then
     raise exception 'Shop access required';
   end if;
+
+  if p_name is null or length(trim(p_name)) not between 1 and 120
+    or p_category is null or length(trim(p_category)) not between 1 and 80
+    or p_buying_price is null or p_buying_price not between 0 and 9999999999.99
+    or p_selling_price is null or p_selling_price not between 0 and 9999999999.99
+    or round(p_buying_price,2) <> p_buying_price or round(p_selling_price,2) <> p_selling_price
+    or p_stock is null or p_stock < 0 or p_reorder_level is null or p_reorder_level < 0
+    then raise exception 'VALIDATION'; end if;
 
   insert into items(shop_id, name, category, buying_price, default_selling_price, stock, reorder_level)
   values (
@@ -440,7 +444,9 @@ begin
     raise exception 'Item not found';
   end if;
 
-  sellable_qty := least(greatest(coalesce(p_qty, 1), 1), item_row.stock);
+  if p_qty is null or p_qty <= 0 or p_sold_price is null or p_sold_price < 0 then raise exception 'VALIDATION'; end if;
+  if p_qty > item_row.stock then raise exception 'INSUFFICIENT_STOCK'; end if;
+  sellable_qty := p_qty;
 
   if sellable_qty <= 0 then
     raise exception 'Item is out of stock';
@@ -477,37 +483,3 @@ grant execute on function public.reset_shop_password(uuid, uuid, text) to anon, 
 grant execute on function public.add_item(uuid, uuid, text, text, numeric, numeric, integer, integer) to anon, authenticated;
 grant execute on function public.update_stock(uuid, uuid, integer) to anon, authenticated;
 grant execute on function public.record_sale(uuid, uuid, uuid, integer, numeric) to anon, authenticated;
-
-insert into owner_accounts(username, password_hash)
-values ('owner', crypt('owner123', gen_salt('bf')))
-on conflict (username) do nothing;
-
-insert into shops(name, area, username, password_hash)
-values
-  ('FC Road Store', 'Shivajinagar, Pune', 'fcroad.admin', crypt('Store@4217', gen_salt('bf'))),
-  ('Kothrud Corner Store', 'Kothrud, Pune', 'kothrud.admin', crypt('Store@8362', gen_salt('bf')))
-on conflict (username) do nothing;
-
-update shops
-set name = 'FC Road Store',
-    password_hash = crypt('Store@4217', gen_salt('bf'))
-where username = 'fcroad.admin';
-
-update shops
-set name = 'Kothrud Corner Store',
-    password_hash = crypt('Store@8362', gen_salt('bf'))
-where username = 'kothrud.admin';
-
-insert into items(shop_id, name, category, buying_price, default_selling_price, stock, reorder_level)
-select shop.id, item.name, item.category, item.buying_price, item.default_selling_price, item.stock, item.reorder_level
-from shops shop
-cross join (
-  values
-    ('Gold Flake Kings', 'Cigarettes', 17::numeric, 20::numeric, 38, 12),
-    ('Classic Milds', 'Cigarettes', 18::numeric, 22::numeric, 24, 10),
-    ('Vimal Pouch', 'Pan Masala', 4::numeric, 5::numeric, 82, 25),
-    ('Rajnigandha', 'Pan Masala', 18::numeric, 20::numeric, 18, 8),
-    ('Pocket Lighter', 'Accessories', 8::numeric, 12::numeric, 17, 6)
-) as item(name, category, buying_price, default_selling_price, stock, reorder_level)
-where shop.username in ('fcroad.admin', 'kothrud.admin')
-  and not exists (select 1 from items existing where existing.shop_id = shop.id);
