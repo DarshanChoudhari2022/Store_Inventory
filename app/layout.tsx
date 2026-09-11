@@ -13,6 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  manifest: '/manifest.webmanifest',
   title: 'Store Inventory Management',
   description:
     'A multi-store inventory, daily sales, profit, generated login, and closing stock dashboard for store admins.',

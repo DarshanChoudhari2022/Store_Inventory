@@ -15,6 +15,7 @@ if (!databaseUrl) {
 
 const sql = await readFile(new URL('../supabase/schema.sql', import.meta.url), 'utf8');
 const operations = await readFile(new URL('../supabase/inventory-operations.sql', import.meta.url), 'utf8');
+const retail = await readFile(new URL('../supabase/migrations/20260912_retail_pos.sql', import.meta.url), 'utf8');
 const client = new Client({
   connectionString: databaseUrl,
   ssl: { rejectUnauthorized: true },
@@ -25,6 +26,7 @@ try {
   await client.query('begin');
   await client.query(sql);
   await client.query(operations);
+  await client.query(retail);
   await client.query("notify pgrst, 'reload schema'");
   await client.query('commit');
   console.log('Supabase inventory migration applied. Existing records preserved.');

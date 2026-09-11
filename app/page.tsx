@@ -2,7 +2,11 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { FormEvent, memo, useEffect, useEffectEvent, useRef, useState } from 'react';
+import RetailWorkspace from './retail/RetailWorkspace';
 import InventoryWorkspace from './inventory/InventoryWorkspace';
+import VoiceInput from './retail/VoiceInput';
+import { readLocal, writeLocal, clearLocalSession, listLocal } from './retail/offline';
+import LandingPage from './landing/LandingPage';
 import { money } from './inventory/domain';
 
 type Item = {
@@ -31,6 +35,7 @@ type ShopAccount = {
   area: string;
   username: string;
   itemCount: number;
+  active: boolean;
 };
 
 type ShopProfile = {
@@ -125,7 +130,7 @@ const dictionary = {
     loginHint: 'Use your owner or shop credentials. Ask the owner admin to reset a shop password if needed.',
     configMissing:
       'Supabase is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in Vercel.',
-    ownerDashboard: 'Owner Admin Dashboard',
+    ownerDashboard: 'Super Admin · All Shops',
     shopAccounts: 'Shop accounts',
     credentialsHint: 'Credentials are revealed only when generated or reset',
     addNewShop: 'Add new shop',
@@ -234,7 +239,7 @@ const dictionary = {
     loginHint: 'मालक किंवा दुकान क्रेडेन्शियल्स वापरा. गरज असल्यास मालक अॅडमिनकडून दुकान पासवर्ड रीसेट करा.',
     configMissing:
       'Supabase कॉन्फिगर केलेले नाही. Vercel मध्ये NEXT_PUBLIC_SUPABASE_URL आणि NEXT_PUBLIC_SUPABASE_ANON_KEY जोडा.',
-    ownerDashboard: 'मालक अॅडमिन डॅशबोर्ड',
+    ownerDashboard: 'सुपर अॅडमिन · सर्व दुकाने',
     shopAccounts: 'दुकान खाती',
     credentialsHint: 'क्रेडेन्शियल्स फक्त तयार किंवा रीसेट केल्यावर दिसतील',
     addNewShop: 'नवीन दुकान जोडा',
@@ -408,6 +413,14 @@ export default function Home() {
   }
 
   async function loadOwner(token: string, preferredShopId?: string) {
+    if (!navigator.onLine) {
+      const cached = await readLocal<{shops: ShopAccount[]; summary: OwnerSummary; at:number}>(token+':owner');
+      if (!cached || Date.now()-cached.at>12*60*60*1000) throw new Error('Connect to load your shops.');
+      setShops(cached.shops); setOwnerSummary(cached.summary);
+      const id=preferredShopId||cached.shops[0]?.id;
+      if(id) await loadShop(token,id);
+      return;
+    }
     const [{ data: summaryData, error: summaryError }, { data: shopsData, error: shopsError }] =
       await Promise.all([
         getSupabaseClient().rpc('owner_summary', { p_token: token }),
@@ -421,6 +434,7 @@ export default function Home() {
       area: String(shop.area),
       username: String(shop.username),
       itemCount: toNumber(shop.itemCount),
+      active: shop.active !== false,
     }));
 
     setOwnerSummary({
@@ -431,6 +445,7 @@ export default function Home() {
       lowStockCount: toNumber(summary.lowStockCount),
     });
     setShops(shopRows);
+    void writeLocal(token+':owner',{shops:shopRows,summary:{shopCount:toNumber(summary.shopCount),revenue:toNumber(summary.revenue),profit:toNumber(summary.profit),inventoryValue:toNumber(summary.inventoryValue),lowStockCount:toNumber(summary.lowStockCount)},at:Date.now()}).catch(()=>{});
 
     const nextShopId = preferredShopId && shopRows.some((shop) => shop.id === preferredShopId)
       ? preferredShopId
@@ -454,6 +469,11 @@ export default function Home() {
 
   async function loadShop(token: string, shopId: string) {
     const request = ++shopRequest.current;
+    if(!navigator.onLine){
+      const cached=await readLocal<{data:ShopDashboardData;at:number}>(token+':base:'+shopId);
+      if(!cached||Date.now()-cached.at>12*60*60*1000)throw new Error('Connect once to load this shop.');
+      if(request===shopRequest.current){setDashboard(cached.data);setSelectedShopId(shopId);}return;
+    }
     const { data, error } = await getSupabaseClient().rpc('get_shop_dashboard', {
       p_token: token,
       p_shop_id: shopId,
@@ -475,6 +495,7 @@ export default function Home() {
       todaysSales,
     });
     setSelectedShopId(String(shop.id));
+    void writeLocal(token+':base:'+shopId,{data:{shop:{id:String(shop.id),name:String(shop.name),area:String(shop.area),username:String(shop.username)},items,todaysSales},at:Date.now()}).catch(()=>{});
     setShops(current => current.map(account => account.id === String(shop.id) ? { ...account, itemCount: items.length } : account));
 
   }
@@ -519,6 +540,11 @@ export default function Home() {
 
   async function handleLogout() {
     const token = session?.token;
+    if(token){
+      const entries=await listLocal<{shopId?:string}>(token+':').catch(()=>[]);
+      if(entries.some(entry=>entry?.shopId)){setMessage('Sync pending bills before logging out to avoid losing unsynced sales.');return;}
+      await clearLocalSession(token).catch(()=>{});
+    }
     shopRequest.current += 1;
     setSession(null);
     setDashboard(null);
@@ -594,73 +620,23 @@ export default function Home() {
     }
   }
 
+  async function updateShop(shop: ShopAccount, name: string, area: string, active: boolean) {
+    if (!session || isBusy) return;
+    setIsBusy(true);
+    try {
+      const { error } = await getSupabaseClient().rpc('admin_update_shop', {
+        p_token: session.token, p_shop_id: shop.id, p_name: name, p_area: area, p_active: active,
+      });
+      if (error) throw new Error(error.message);
+      setMessage(active ? `${name} updated and active` : `${name} paused. Shop sessions revoked.`);
+      await loadOwner(session.token, selectedShopId);
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Could not update shop'); }
+    finally { setIsBusy(false); }
+  }
+
   if (!session) {
     return (
-      <main className="auth-shell min-h-screen text-[#20221f]">
-        <section className="auth-grid mx-auto flex min-h-screen max-w-7xl flex-col px-5 py-5">
-          <div className="auth-topbar">
-            <div className="auth-brand">
-              <span className="auth-logo">SE</span>
-              <div>
-                <p>{copy.appName}</p>
-                <span>{copy.eyebrow}</span>
-              </div>
-            </div>
-            <div className="auth-actions">
-              <LanguageToggle lang={lang} setLang={changeLanguage} />
-              <span>{copy.secureAccess}</span>
-            </div>
-          </div>
-
-          <div className="auth-stage grid flex-1 items-center gap-7 lg:grid-cols-[1.05fr_0.95fr]">
-            <div className="auth-copy">
-              <p className="auth-kicker">{copy.livePreview}</p>
-              <h1>{copy.heroTitle}</h1>
-              <p className="auth-lede">{copy.heroCopy}</p>
-              <div className="landing-features">
-                {[
-                  { label: copy.shopLogins, value: copy.shopAccess },
-                  { label: copy.cloudData, value: copy.everyProduct },
-                  { label: copy.profitView, value: copy.lowStockFocus },
-                ].map((feature) => (
-                  <div key={feature.label} className="feature-tile">
-                    <p>{feature.label}</p>
-                    <span>{feature.value}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="landing-preview">
-                <div className="landing-preview-head">
-                  <span>{copy.livePreview}</span>
-                  <strong>{copy.inventoryControl}</strong>
-                </div>
-                <div className="landing-preview-grid">
-                  <div>
-                    <span>{copy.stockCount}</span>
-                    <strong>{copy.availableQty}</strong>
-                  </div>
-                  <div>
-                    <span>{copy.addItem}</span>
-                    <strong>{copy.product}</strong>
-                  </div>
-                  <div>
-                    <span>{copy.restockPriority}</span>
-                    <strong>{copy.needsRestock}</strong>
-                  </div>
-                </div>
-                <div className="landing-preview-row">
-                  <span>{copy.updateQty}</span>
-                  <strong>{copy.dailyClosingPanel}</strong>
-                </div>
-                <div className="landing-preview-row is-alert">
-                  <span>{copy.addProductHint}</span>
-                  <strong>{copy.addItemAction}</strong>
-                </div>
-              </div>
-            </div>
-
-            <div className="auth-panel-wrap">
-                            <form onSubmit={handleLogin} className="auth-card">
+<LandingPage lang={lang} languageToggle={<LanguageToggle lang={lang} setLang={changeLanguage} />}><form onSubmit={handleLogin} className="auth-card">
                 <div className="auth-card-title">
                   <div>
                     <span>{copy.secureAccess}</span>
@@ -676,7 +652,7 @@ export default function Home() {
                 <label className="mt-6 block text-sm font-medium" htmlFor="username">
                   {copy.username}
                 </label>
-                <input
+        <VoiceInput
                   id="username"
                   name="username"
                   required
@@ -708,14 +684,7 @@ export default function Home() {
                 <p className="sr-only" role="status" aria-live="polite">
                   {message}
                 </p>
-              </form>
-              <p className="auth-footnote">
-                {copy.todaySales} · {copy.todayProfit} · {copy.closingCount}
-              </p>
-            </div>
-          </div>
-        </section>
-      </main>
+              </form></LandingPage>
     );
   }
 
@@ -773,7 +742,7 @@ export default function Home() {
                     <tbody>
                       {shops.map((shop) => (
                         <tr key={shop.id} className="border-t border-[#eee9dc]">
-                          <td className="px-4 py-3 font-medium">{shop.name}</td>
+                          <td className="px-4 py-3 font-medium">{shop.name}<span className="ml-2 text-xs">{shop.active ? 'Active' : 'Paused'}</span></td>
                           <td className="px-4 py-3">{shop.area}</td>
                           <td className="px-4 py-3 font-mono text-xs">{shop.username}</td>
                           <td className="px-4 py-3">{shop.itemCount}</td>
@@ -787,6 +756,19 @@ export default function Home() {
                               >
                                 {copy.view}
                               </button>
+                              <details>
+                                <summary className="cursor-pointer p-2">Edit / access</summary>
+                                <form className="grid gap-2 py-3" onSubmit={e => {
+                                  e.preventDefault();
+                                  const f = new FormData(e.currentTarget);
+                                  void updateShop(shop, String(f.get('name')), String(f.get('area')), f.get('active') === 'on');
+                                }}>
+                                  <label>Shop name<input name="name" defaultValue={shop.name} required maxLength={120} className="block border p-2" /></label>
+                                  <label>Area<input name="area" defaultValue={shop.area} required maxLength={120} className="block border p-2" /></label>
+                                  <label><input type="checkbox" name="active" defaultChecked={shop.active} /> Shop active</label>
+                                  <button disabled={isBusy} className="border p-2">Save shop</button>
+                                </form>
+                              </details>
                               <button
                                 type="button"
                                 onClick={() => void resetShopPassword(shop.id)}
@@ -851,17 +833,34 @@ export default function Home() {
           </details>
         ) : null}
 
+        {session.role === 'owner' && shops.length > 0 && <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-[#d5e1da] bg-white p-3">
+          <label htmlFor="active-shop">{lang === 'mr' ? 'दुकान निवडा' : 'Working in shop'}</label>
+          <select id="active-shop" value={selectedShopId} disabled={isBusy} onChange={e => void selectShop(e.target.value)} className="rounded border p-2">
+            {shops.map(shop => <option key={shop.id} value={shop.id}>{shop.name}{shop.active ? '' : ' (Paused)'}</option>)}
+          </select>
+          <button className="ml-auto rounded border px-3 py-2" onClick={() => setOwnerOpen(true)}>{lang === 'mr' ? 'दुकाने व्यवस्थापित करा' : 'Manage / add shops'}</button>
+        </div>}
+
         {dashboard ? (
-          <InventoryWorkspace
+          <RetailWorkspace
+            fallback={<InventoryWorkspace data={dashboard} lang={lang} rpc={async (name, args) => {
+              const { data, error } = await getSupabaseClient().rpc(name, { ...args, p_token: session.token });
+              if (error) throw new Error(`${error.code}: ${error.message}`);
+              return data;
+            }} refresh={async () => {
+              await loadShop(session.token, dashboard.shop.id);
+              if (session.role === 'owner') await loadOwnerSummary(session.token);
+            }} />}
             key={dashboard.shop.id}
-            data={dashboard}
+            sessionId={session.token}
+            shopId={dashboard.shop.id}
             lang={lang}
             rpc={async (name, args) => {
               const { data, error } = await getSupabaseClient().rpc(name, { ...args, p_token: session.token });
               if (error) throw new Error(`${error.code}: ${error.message}`);
               return data;
             }}
-            refresh={async () => {
+            onChanged={async () => {
               await loadShop(session.token, dashboard.shop.id);
               if (session.role === 'owner') await loadOwnerSummary(session.token);
             }}
@@ -966,3 +965,4 @@ const Field = memo(function Field({
     </label>
   );
 });
+

@@ -1,0 +1,1976 @@
+"use client";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
+import {
+  Package,
+  ShoppingCart,
+  Users,
+  Truck,
+  ReceiptText,
+  Wallet,
+  ChartNoAxesCombined,
+  Settings,
+  Repeat,
+  RefreshCw,
+  Search,
+  Plus,
+  Trash2,
+  Barcode,
+  Download,
+  Store,
+} from "lucide-react";
+import {
+  cash,
+  today,
+  lineTotal,
+  report,
+  downloadCsv,
+  parseCsv,
+  type CartLine,
+  type Product,
+  type Workspace,
+  type Invoice,
+} from "./domain";
+import Receipt from "./Receipt";
+import ScanBarcode from "./ScanBarcode";
+import BarcodeLabel from "./BarcodeLabel";
+import PurchaseScan from "./PurchaseScan";
+import VoiceInput from "./VoiceInput";
+import {
+  readLocal,
+  writeLocal,
+  listLocal,
+  removeLocal,
+  type PendingSale,
+} from "./offline";
+import "./retail.css";
+
+type Rpc = (name: string, args: Record<string, unknown>) => Promise<unknown>;
+type View =
+  | "sell"
+  | "products"
+  | "bills"
+  | "customers"
+  | "suppliers"
+  | "purchases"
+  | "cash"
+  | "reports"
+  | "recurring"
+  | "settings";
+type Dialog = { type: string; product?: Product; id?: string };
+export default function RetailWorkspace({
+  shopId,
+  sessionId,
+  lang,
+  rpc,
+  onChanged,
+  fallback,
+}: {
+  shopId: string;
+  sessionId: string;
+  lang: "en" | "mr";
+  rpc: Rpc;
+  onChanged: () => Promise<void>;
+  fallback?: ReactNode;
+}) {
+  const t = (a: string, b: string) => (lang === "mr" ? b : a);
+  const namespace = `${sessionId}:${shopId}`;
+  const [scan, setScan] = useState(false),
+    [labelProduct, setLabelProduct] = useState<Product | null>(null);
+  const [purchaseScan, setPurchaseScan] = useState(false);
+  const [pending, setPending] = useState<PendingSale[]>([]),
+    [offline, setOffline] = useState(false),
+    [draftReady, setDraftReady] = useState(false);
+  const [data, setData] = useState<Workspace | null>(null),
+    [view, setView] = useState<View>("sell"),
+    [from, setFrom] = useState(today()),
+    [to, setTo] = useState(today());
+  const [query, setQuery] = useState(""),
+    [category, setCategory] = useState(""),
+    [low, setLow] = useState(false),
+    [cart, setCart] = useState<CartLine[]>([]),
+    [purchaseCart, setPurchaseCart] = useState<CartLine[]>([]);
+  const [contactId, setContactId] = useState(""),
+    [method, setMethod] = useState("cash"),
+    [paid, setPaid] = useState(""),
+    [reference, setReference] = useState(""),
+    [interstate, setInterstate] = useState(false),
+    [supplyState, setSupplyState] = useState("");
+  const [dialog, setDialog] = useState<Dialog | null>(null),
+    [receipt, setReceipt] = useState<Invoice | null>(null),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState(""),
+    [notice, setNotice] = useState(""),
+    [selectedContact, setSelectedContact] = useState("");
+  const lock = useRef(false),
+    request = useRef<{ key: string; id: string } | null>(null),
+    generation = useRef(0);
+  const rpcRef = useRef(rpc);
+  useEffect(() => {
+    let alive = true;
+    void Promise.all([
+      readLocal<CartLine[]>(namespace + ":cart"),
+      listLocal<PendingSale>(namespace + ":sale:"),
+    ])
+      .then(([draft, sales]) => {
+        if (alive) {
+          if (draft) setCart(draft);
+          setPending(sales);
+          setDraftReady(true);
+        }
+      })
+      .catch(() => {
+        if (alive) setDraftReady(true);
+      });
+    const change = () => setOffline(!navigator.onLine);
+    change();
+    window.addEventListener("online", change);
+    window.addEventListener("offline", change);
+    if ("serviceWorker" in navigator && process.env.NODE_ENV === "production")
+      void navigator.serviceWorker.register("/retail-sw.js").catch(() => {});
+    return () => {
+      alive = false;
+      window.removeEventListener("online", change);
+      window.removeEventListener("offline", change);
+    };
+  }, [namespace]);
+  useEffect(() => {
+    if (draftReady) void writeLocal(namespace + ":cart", cart).catch(() => {});
+  }, [cart, draftReady, namespace]);
+  useEffect(() => {
+    rpcRef.current = rpc;
+  }, [rpc]);
+  const reload = useCallback(async () => {
+    const n = ++generation.current;
+    if (!navigator.onLine) {
+      const cached = await readLocal<{ value: Workspace; at: number }>(
+        namespace + ":workspace",
+      );
+      if (cached && Date.now() - cached.at < 12 * 60 * 60 * 1000) {
+        if (n === generation.current) setData(cached.value);
+        return;
+      }
+      throw new Error(
+        "Connect once to load this shop. Offline access expires after 12 hours.",
+      );
+    }
+    const w = (await rpcRef.current("retail_workspace", {
+      p_shop_id: shopId,
+      p_from: from,
+      p_to: to,
+    })) as Workspace;
+    if (n === generation.current) {
+      setData(w);
+      void writeLocal(namespace + ":workspace", {
+        value: w,
+        at: Date.now(),
+      }).catch(() => {});
+    }
+  }, [shopId, from, to, namespace]);
+  useEffect(() => {
+    let alive = true;
+    const counter = generation;
+    reload().catch((e) => {
+      if (alive) setError(String(e.message));
+    });
+    return () => {
+      alive = false;
+      counter.current++;
+    };
+  }, [reload]);
+  useEffect(() => {
+    const focus = () => {
+      if (!lock.current) reload().catch(() => {});
+    };
+    window.addEventListener("focus", focus);
+    window.addEventListener("online", focus);
+    return () => {
+      window.removeEventListener("focus", focus);
+      window.removeEventListener("online", focus);
+    };
+  }, [reload]);
+  const perform = async (action: string, payload: Record<string, unknown>) => {
+    if (lock.current) return null;
+    lock.current = true;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    const key = JSON.stringify({ action, payload });
+    if (!request.current || request.current.key !== key)
+      request.current = { key, id: crypto.randomUUID() };
+    let salePersisted = false;
+    try {
+      if (action === "checkout") {
+        const sale: PendingSale = {
+          id: request.current.id,
+          shopId,
+          data: payload,
+          created: new Date().toISOString(),
+        };
+        await writeLocal(namespace + ":sale:" + sale.id, sale);
+        salePersisted = true;
+        setPending(await listLocal<PendingSale>(namespace + ":sale:"));
+        if (!navigator.onLine) {
+          request.current = null;
+          setNotice(
+            "Bill queued on this device. Connect and sync to receive the final invoice.",
+          );
+          return { queued: true };
+        }
+      } else if (!navigator.onLine) {
+        throw new Error(
+          "This operation needs a connection. Your entries are still here.",
+        );
+      }
+      const result = await rpcRef.current("retail_action", {
+        p_shop_id: shopId,
+        p_request_id: request.current.id,
+        p_action: action,
+        p_data: payload,
+      });
+      if (action === "checkout") {
+        await removeLocal(namespace + ":sale:" + request.current.id);
+        setPending(await listLocal<PendingSale>(namespace + ":sale:"));
+      }
+      request.current = null;
+      setNotice(t("Saved successfully", "यशस्वीपणे जतन झाले"));
+      try {
+        await reload();
+        await onChanged();
+      } catch {
+        setNotice(
+          t(
+            "Saved. Refresh to see the latest data.",
+            "जतन झाले. नवीन माहितीसाठी रीफ्रेश करा.",
+          ),
+        );
+      }
+      return result;
+    } catch (e) {
+      if (action === "checkout" && request.current && salePersisted) {
+        // Definitive database rejection rolls back. Network failures retain the exact request for retry.
+        const message = e instanceof Error ? e.message : "";
+        if (/P0001|22P02|23505|23514|23502/.test(message)) {
+          await removeLocal(namespace + ":sale:" + request.current.id);
+          setPending(await listLocal<PendingSale>(namespace + ":sale:"));
+        } else {
+          request.current = null;
+          setCart([]);
+          setError(
+            "The bill is pending confirmation. Use Sync pending bills before re-entering it.",
+          );
+          return { queued: true };
+        }
+      }
+      setError(e instanceof Error ? e.message : "Could not save");
+      return null;
+    } finally {
+      lock.current = false;
+      setBusy(false);
+    }
+  };
+  const syncPending = async () => {
+    if (lock.current || !navigator.onLine) return;
+    lock.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      const sales = await listLocal<PendingSale>(namespace + ":sale:");
+      for (const sale of sales.sort((a, b) =>
+        a.created.localeCompare(b.created),
+      )) {
+        if (sale.rejection) continue;
+        let i: Invoice;
+        try {
+        i = (await rpcRef.current("retail_action", {
+          p_shop_id: shopId,
+          p_request_id: sale.id,
+          p_action: "checkout",
+          p_data: sale.data,
+        })) as Invoice;
+        } catch (e) {
+          const message = e instanceof Error ? e.message : "Connection failed";
+          if (/P0001|22P02|23505|23514|23502/.test(message)) {
+            await writeLocal(namespace + ":sale:" + sale.id, { ...sale, rejection: message });
+            continue;
+          }
+          throw e;
+        }
+        await removeLocal(namespace + ":sale:" + sale.id);
+        setReceipt(i);
+      }
+      setPending(await listLocal<PendingSale>(namespace + ":sale:"));
+      await reload();
+      await onChanged();
+      setNotice(
+        "Sync finished. Any rejected bills below need correction; they have not been posted.",
+      );
+    } catch (e) {
+      setPending(await listLocal<PendingSale>(namespace + ":sale:"));
+      setError(
+        `Sync stopped; the pending bill is retained: ${e instanceof Error ? e.message : "Connection failed"}`,
+      );
+    } finally {
+      lock.current = false;
+      setBusy(false);
+    }
+  };
+  const nav: [View, string, string, typeof Package][] = [
+    ["sell", "Sell", "विक्री", ShoppingCart],
+    ["products", "Products", "उत्पादने", Package],
+    ["bills", "Bills", "बिले", ReceiptText],
+    ["customers", "Customers", "ग्राहक", Users],
+    ["suppliers", "Suppliers", "पुरवठादार", Truck],
+    ["purchases", "Purchases", "खरेदी", Store],
+    ["cash", "Cash & expenses", "रोकड व खर्च", Wallet],
+    ["reports", "Reports", "अहवाल", ChartNoAxesCombined],
+    ["recurring", "Recurring bills", "नियमित बिले", Repeat],
+    ["settings", "Shop settings", "दुकान सेटिंग्ज", Settings],
+  ];
+  const purchasing = view === "purchases",
+    currentCart = purchasing ? purchaseCart : cart,
+    setCurrentCart = purchasing ? setPurchaseCart : setCart;
+  const total = currentCart.reduce((n, l) => n + lineTotal(l), 0);
+  const add = (p: Product) =>
+    setCurrentCart((prev) => {
+      const existing = prev.find((l) => l.id === p.id);
+      return existing
+        ? prev.map((l) =>
+            l.id === p.id
+              ? { ...l, qty: Math.round((l.qty + 1) * 1000) / 1000 }
+              : l,
+          )
+        : [
+            ...prev,
+            {
+              id: p.id,
+              qty: 1,
+              price: Number(
+                purchasing ? p.buying_price : p.default_selling_price,
+              ),
+              discount: 0,
+            },
+          ];
+    });
+  const update = (id: string, key: keyof CartLine, value: number) =>
+    setCurrentCart((prev) =>
+      prev.map((l) => (l.id === id ? { ...l, [key]: value } : l)),
+    );
+  const checkout = async () => {
+    const result = await perform(purchasing ? "purchase" : "checkout", {
+      lines: currentCart,
+      contactId,
+      method,
+      paid:
+        method === "credit"
+          ? 0
+          : paid === ""
+            ? Math.round(total * 100) / 100
+            : Number(paid),
+      reference,
+      interstate,
+      supplyState,
+    });
+    if (result) {
+      setCurrentCart([]);
+      setPaid("");
+      setContactId("");
+      setReference("");
+      if (!purchasing && !(result as { queued?: boolean }).queued)
+        setReceipt(result as Invoice);
+    }
+  };
+  const changeView = (v: View) => {
+    setView(v);
+    setQuery("");
+    setCategory("");
+    setLow(false);
+    setContactId("");
+    setPaid("");
+    setSelectedContact("");
+    setError("");
+  };
+  const rows =
+    data?.products.filter(
+      (p) =>
+        (!category || p.category === category) &&
+        (!low || p.stock <= p.reorder_level) &&
+        `${p.name} ${p.barcode} ${p.category}`
+          .toLowerCase()
+          .includes(query.toLowerCase()),
+    ) || [];
+  const scanSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    const p = data?.products.find((p) => p.barcode === query.trim());
+    if (p) {
+      add(p);
+      setQuery("");
+    } else
+      setNotice(
+        t(
+          "No matching barcode. Search by product name.",
+          "बारकोड जुळला नाही. नावाने शोधा.",
+        ),
+      );
+  };
+  const summary = data ? report(data) : null;
+  async function importProducts(file: File) {
+    try {
+      if (file.size > 2_000_000) throw new Error("CSV must be under 2 MB");
+      const rows = parseCsv(await file.text());
+      const expected = [
+        "name",
+        "category",
+        "cost",
+        "price",
+        "stock",
+        "reorder",
+        "barcode",
+        "unit",
+        "hsn",
+        "tax",
+        "expiry",
+      ];
+      if (
+        rows[0]
+          ?.map((s) =>
+            s
+              .replace(/^\uFEFF/, "")
+              .trim()
+              .toLowerCase(),
+          )
+          .join(",") !== expected.join(",")
+      )
+        throw new Error("Use the downloadable CSV template headers");
+      if (rows.length > 501)
+        throw new Error("Import up to 500 products at a time");
+      for (let n = 1; n < rows.length; n++) {
+        if (rows[n].length !== expected.length)
+          throw new Error(`Row ${n + 1}: expected ${expected.length} columns`);
+        const p = Object.fromEntries(expected.map((k, i) => [k, rows[n][i]]));
+        for (const k of ["cost", "price", "stock", "reorder", "tax"]) {
+          if (p[k] === "" || !Number.isFinite(Number(p[k])))
+            throw new Error(`Row ${n + 1}: invalid ${k}`);
+        }
+      }
+      setImportRows(
+        rows
+          .slice(1)
+          .map((row) =>
+            Object.fromEntries(expected.map((k, i) => [k, row[i]])),
+          ),
+      );
+      setDialog({ type: "import" });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Invalid CSV");
+    }
+  }
+  const [importRows, setImportRows] = useState<Record<string, string>[]>([]),
+    [importDone, setImportDone] = useState(0);
+  const importNow = async () => {
+    for (let i = importDone; i < importRows.length; i++) {
+      const r = await perform("product", importRows[i]);
+      if (!r) return;
+      setImportDone(i + 1);
+    }
+    setDialog(null);
+    setImportRows([]);
+    setImportDone(0);
+  };
+  if (!data && error.includes("PGRST202") && fallback)
+    return <><p className="retail-warning" role="status">The retail upgrade is awaiting database setup. Your existing inventory workspace is available below.</p>{fallback}</>;
+  if (!data)
+    return (
+      <section className="retail-loading">
+        <h2>
+          {t("Opening your shop workspace", "दुकानाचे कार्यस्थळ उघडत आहे")}
+        </h2>
+        {error ? (
+          <>
+            <p role="alert">
+              {error.includes("PGRST202")
+                ? "The retail database upgrade is required. Existing inventory is safe."
+                : error}
+            </p>
+            <button onClick={() => reload().catch((e) => setError(e.message))}>
+              {t("Retry", "पुन्हा प्रयत्न करा")}
+            </button>
+          </>
+        ) : (
+          <p>
+            {t(
+              "Loading products and records…",
+              "उत्पादने व नोंदी लोड होत आहेत…",
+            )}
+          </p>
+        )}
+      </section>
+    );
+  const contacts = data.contacts.filter(
+    (c) => c.kind === (purchasing ? "supplier" : "customer"),
+  );
+  return (
+    <section className="retail" aria-busy={busy}>
+      <aside className="retail-nav">
+        <div className="retail-shop">
+          <Store />
+          <div>
+            <strong>{data.shop.name}</strong>
+            <small>{data.shop.area}</small>
+          </div>
+        </div>
+        {nav.map(([v, en, mr, Icon]) => (
+          <button
+            key={v}
+            onClick={() => changeView(v)}
+            aria-current={view === v ? "page" : undefined}
+          >
+            <Icon size={19} />
+            <span>{t(en, mr)}</span>
+            {v === "sell" && cart.length > 0 && <b>{cart.length}</b>}
+          </button>
+        ))}
+      </aside>
+      <div className="retail-main">
+        <header className="retail-heading">
+          <div>
+            <p>{t("YOUR SHOP WORKSPACE", "तुमच्या दुकानाचे कार्यस्थळ")}</p>
+            <h2>
+              {t(
+                nav.find((n) => n[0] === view)![1],
+                nav.find((n) => n[0] === view)![2],
+              )}
+            </h2>
+          </div>
+          <button
+            disabled={busy}
+            onClick={() => reload().catch((e) => setError(e.message))}
+          >
+            <RefreshCw size={17} />
+            {t("Refresh", "रीफ्रेश")}
+          </button>
+        </header>
+        {offline && (
+          <p className="retail-warning">
+            Offline · cached shop data. Sales queue on this device and receive a
+            final invoice after syncing. Reports may be out of date.
+          </p>
+        )}
+        {pending.length > 0 && (
+          <div className="retail-warning">
+            <strong>{pending.length} bill(s) pending confirmation</strong>
+            <p>
+              Do not enter these sales again. They will be checked using their
+              original request IDs.
+            </p>
+            <button disabled={busy || offline} onClick={syncPending}>
+              Sync pending bills
+            </button>
+            {pending.filter(s => s.rejection).map(s => <div key={s.id}>
+              <p role="alert">Rejected bill ({new Date(s.created).toLocaleString()}): {s.rejection}</p>
+              <button disabled={busy || cart.length > 0} onClick={async () => {
+                const lines = s.data.lines as CartLine[];
+                // Save the recoverable draft before removing a definitively rejected request.
+                await writeLocal(namespace + ':cart', lines);
+                await removeLocal(namespace + ':sale:' + s.id);
+                setCart(lines); setView('sell'); setContactId(String(s.data.contactId || ''));
+                setMethod(String(s.data.method || 'cash')); setPaid(String(s.data.paid ?? ''));
+                setReference(String(s.data.reference || '')); setInterstate(Boolean(s.data.interstate));
+                setSupplyState(String(s.data.supplyState || '')); request.current = null;
+                setPending(await listLocal<PendingSale>(namespace + ':sale:'));
+              }}>Restore rejected bill to empty cart</button>
+            </div>)}
+          </div>
+        )}
+        {purchasing && (
+          <div className="retail-toolbar">
+            <button
+              onClick={() => setPurchaseScan(true)}
+              disabled={purchaseCart.length > 0 || offline}
+            >
+              Scan supplier bill images
+            </button>
+            {purchaseCart.length > 0 && (
+              <small>
+                Finish the current purchase before scanning another bill.
+              </small>
+            )}
+          </div>
+        )}
+        {!data.shop.active && (
+          <p className="retail-warning">
+            {t(
+              "This shop is paused. Reactivate it in super-admin controls to save changes.",
+              "हे दुकान बंद आहे. बदल जतन करण्यासाठी सुपर अॅडमिनने सक्रिय करावे.",
+            )}
+          </p>
+        )}
+        {error && (
+          <p className="retail-error" role="alert">
+            {error}
+          </p>
+        )}
+        {notice && (
+          <p className="retail-notice" role="status">
+            {notice}
+          </p>
+        )}
+        {["bills", "purchases", "cash", "reports"].includes(view) && (
+          <div className="retail-dates">
+            <label>
+              {t("From", "पासून")}
+              <input
+                type="date"
+                value={from}
+                max={to}
+                onChange={(e) => setFrom(e.target.value)}
+              />
+            </label>
+            <label>
+              {t("To", "पर्यंत")}
+              <input
+                type="date"
+                value={to}
+                min={from}
+                onChange={(e) => setTo(e.target.value)}
+              />
+            </label>
+            <span>IST</span>
+          </div>
+        )}
+        {(view === "sell" || view === "purchases") && (
+          <>
+            <div className="retail-pos">
+              <div className="retail-catalog">
+                <form className="retail-search" onSubmit={scanSubmit}>
+                  <Search size={19} />
+                  <input
+                    aria-label="Search products or scan barcode"
+                    placeholder={t(
+                      "Search name or scan barcode…",
+                      "नाव किंवा बारकोड शोधा…",
+                    )}
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                  />
+                  <button title="Add scanned barcode">
+                    <Barcode size={20} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setScan(true)}
+                    title="Scan with camera"
+                  >
+                    Camera
+                  </button>
+                </form>
+                <div className="retail-category">
+                  <button
+                    onClick={() => setCategory("")}
+                    aria-pressed={!category}
+                  >
+                    {t("All", "सर्व")}
+                  </button>
+                  {[...new Set(data.products.map((p) => p.category))].map(
+                    (c) => (
+                      <button
+                        key={c}
+                        onClick={() => setCategory(c)}
+                        aria-pressed={category === c}
+                      >
+                        {c}
+                      </button>
+                    ),
+                  )}
+                </div>
+                <div className="retail-product-grid">
+                  {rows.map((p) => (
+                    <button
+                      className="retail-product"
+                      key={p.id}
+                      onClick={() => add(p)}
+                      disabled={
+                        !purchasing &&
+                        (p.stock <= 0 ||
+                          (!!p.expiry_date && p.expiry_date < today()))
+                      }
+                    >
+                      <span className="retail-product-category">
+                        {p.category}
+                        <Plus size={16} />
+                      </span>
+                      <strong>{p.name}</strong>
+                      <b>
+                        {cash(
+                          purchasing ? p.buying_price : p.default_selling_price,
+                        )}
+                      </b>
+                      <small
+                        className={p.stock <= p.reorder_level ? "low" : ""}
+                      >
+                        {p.stock} {p.unit} {t("available", "उपलब्ध")}
+                        {p.expiry_date && p.expiry_date < today()
+                          ? " · Expired"
+                          : ""}
+                      </small>
+                    </button>
+                  ))}
+                </div>
+                {!rows.length && (
+                  <Empty>
+                    {t(
+                      "No products found. Add products in the Products tab.",
+                      "उत्पादने सापडली नाहीत. उत्पादने टॅबमध्ये जोडा.",
+                    )}
+                  </Empty>
+                )}
+              </div>
+              <section className="retail-cart">
+                <h3>
+                  <ShoppingCart size={19} />
+                  {purchasing
+                    ? t("Receive stock", "माल स्वीकारा")
+                    : t("Current bill", "सध्याचे बिल")}
+                  <span>{currentCart.length}</span>
+                </h3>
+                {!currentCart.length ? (
+                  <Empty>
+                    {t(
+                      "Tap a product to add it here.",
+                      "उत्पादन इथे जोडण्यासाठी त्यावर टॅप करा.",
+                    )}
+                  </Empty>
+                ) : (
+                  currentCart.map((l) => {
+                    const p = data.products.find((p) => p.id === l.id);
+                    return (
+                      <div className="retail-cart-line" key={l.id}>
+                        <div>
+                          <strong>{p?.name || "Unavailable product"}</strong>
+                          <button
+                            aria-label={`Remove ${p?.name}`}
+                            onClick={() =>
+                              setCurrentCart((prev) =>
+                                prev.filter((x) => x.id !== l.id),
+                              )
+                            }
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                        <div className="retail-line-fields">
+                          <label>
+                            {t("Qty", "संख्या")}
+                            <input
+                              type="number"
+                              min="0.001"
+                              step={
+                                p?.unit === "pcs" || p?.unit === "pack"
+                                  ? "1"
+                                  : "0.001"
+                              }
+                              value={l.qty}
+                              onChange={(e) =>
+                                update(l.id, "qty", Number(e.target.value))
+                              }
+                            />
+                          </label>
+                          <label>
+                            {t("Price", "किंमत")}
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={l.price}
+                              onChange={(e) =>
+                                update(l.id, "price", Number(e.target.value))
+                              }
+                            />
+                          </label>
+                          <label>
+                            {t("Off %", "सूट %")}
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.01"
+                              value={l.discount}
+                              onChange={(e) =>
+                                update(l.id, "discount", Number(e.target.value))
+                              }
+                            />
+                          </label>
+                        </div>
+                        <b>{cash(lineTotal(l))}</b>
+                      </div>
+                    );
+                  })
+                )}
+                <div className="retail-checkout">
+                  <label>
+                    {purchasing
+                      ? t("Supplier", "पुरवठादार")
+                      : t("Customer", "ग्राहक")}
+                    <select
+                      value={contactId}
+                      onChange={(e) => setContactId(e.target.value)}
+                    >
+                      <option value="">
+                        {purchasing
+                          ? t("Choose supplier", "पुरवठादार निवडा")
+                          : t("Walk-in customer", "सामान्य ग्राहक")}
+                      </option>
+                      {contacts.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} · {cash(c.balance)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {purchasing && (
+                    <label>
+                      {t("Supplier bill reference", "पुरवठादार बिल क्रमांक")}
+                      <input
+                        value={reference}
+                        onChange={(e) => setReference(e.target.value)}
+                      />
+                    </label>
+                  )}
+                  <label>
+                    {t("Payment method", "पैसे देण्याची पद्धत")}
+                    <select
+                      value={method}
+                      onChange={(e) => setMethod(e.target.value)}
+                    >
+                      <option value="cash">Cash / रोकड</option>
+                      <option value="upi">UPI</option>
+                      <option value="card">Card / कार्ड</option>
+                      {!purchasing && (
+                        <option value="credit">Credit / उधार</option>
+                      )}
+                    </select>
+                  </label>
+                  {method !== "credit" && (
+                    <label>
+                      {t(
+                        "Amount paid (leave blank for full)",
+                        "दिलेली रक्कम (पूर्ण असल्यास रिक्त)",
+                      )}
+                      <input
+                        type="number"
+                        min="0"
+                        max={total}
+                        step="0.01"
+                        value={paid}
+                        onChange={(e) => setPaid(e.target.value)}
+                        placeholder={total.toFixed(2)}
+                      />
+                    </label>
+                  )}
+                  {!purchasing && data.shop.settings.gstin && (
+                    <>
+                      <label className="retail-check">
+                        <input
+                          type="checkbox"
+                          checked={interstate}
+                          onChange={(e) => setInterstate(e.target.checked)}
+                        />
+                        Inter-state supply (IGST)
+                      </label>
+                      {interstate && (
+                        <label>
+                          Place of supply
+                          <input
+                            value={supplyState}
+                            onChange={(e) => setSupplyState(e.target.value)}
+                            placeholder="State name and code"
+                          />
+                        </label>
+                      )}
+                      <small>Prices include the configured GST rate.</small>
+                    </>
+                  )}
+                  <div className="retail-total">
+                    <span>{t("Total", "एकूण")}</span>
+                    <strong>{cash(total)}</strong>
+                  </div>
+                  {contactId && (
+                    <small>
+                      {t("Remaining due", "उरलेली उधारी")}:{" "}
+                      {cash(
+                        total -
+                          (method === "credit"
+                            ? 0
+                            : paid === ""
+                              ? total
+                              : Number(paid)),
+                      )}
+                    </small>
+                  )}
+                  <button
+                    className="primary retail-pay"
+                    disabled={busy || !currentCart.length || !data.shop.active}
+                    onClick={checkout}
+                  >
+                    {busy
+                      ? t("Saving…", "जतन होत आहे…")
+                      : purchasing
+                        ? t("Save purchase & receive", "खरेदी जतन करा")
+                        : t("Save bill", "बिल जतन करा")}
+                  </button>
+                  <small>
+                    {t(
+                      "Payment method records your collection; it does not charge a bank account.",
+                      "ही नोंद आहे; बँक खात्यातून पैसे आपोआप घेतले जात नाहीत.",
+                    )}
+                  </small>
+                </div>
+              </section>
+            </div>
+            {purchasing && (
+              <section className="retail-panel">
+                <h3>{t("Purchase history", "खरेदी नोंदी")}</h3>
+                <Table
+                  headers={["Reference", "Supplier", "Total", "Paid", "Date"]}
+                  rows={data.purchases.map((p) => [
+                    p.reference,
+                    data.contacts.find((c) => c.id === p.supplier_id)?.name ||
+                      "",
+                    cash(p.total),
+                    cash(p.paid),
+                    date(p.created_at),
+                  ])}
+                />
+              </section>
+            )}
+          </>
+        )}
+        {view === "products" && (
+          <>
+            <div className="retail-toolbar">
+              <input
+                aria-label="Search products"
+                placeholder={t("Search products", "उत्पादने शोधा")}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+              <label className="retail-check">
+                <input
+                  type="checkbox"
+                  checked={low}
+                  onChange={(e) => setLow(e.target.checked)}
+                />
+                {t("Low stock", "कमी साठा")}
+              </label>
+              <button
+                className="primary"
+                onClick={() => setDialog({ type: "product" })}
+              >
+                <Plus size={17} />
+                {t("Add product", "उत्पादन जोडा")}
+              </button>
+              <button
+                onClick={() =>
+                  downloadCsv("products-template.csv", [
+                    [
+                      "name",
+                      "category",
+                      "cost",
+                      "price",
+                      "stock",
+                      "reorder",
+                      "barcode",
+                      "unit",
+                      "hsn",
+                      "tax",
+                      "expiry",
+                    ],
+                    ["Tea", "Grocery", 10, 15, 20, 5, "", "pcs", "", 0, ""],
+                  ])
+                }
+              >
+                CSV template
+              </button>
+              <label className="retail-upload">
+                Import CSV
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  onChange={(e) => {
+                    setImportDone(0);
+                    const file = e.target.files?.[0];
+                    if (file) void importProducts(file);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+            </div>
+            <Table
+              headers={[
+                "Product",
+                "Price",
+                "Cost",
+                "Available",
+                "Barcode",
+                "Expiry",
+                "Action",
+              ]}
+              rows={rows.map((p) => [
+                p.name,
+                cash(p.default_selling_price),
+                cash(p.buying_price),
+                `${p.stock} ${p.unit}`,
+                p.barcode || "—",
+                p.expiry_date || "—",
+                <div className="retail-row-actions" key={p.id}>
+                  <button
+                    onClick={() => setDialog({ type: "product", product: p })}
+                  >
+                    {t("Edit / count", "बदला / मोजा")}
+                  </button>
+                  <button
+                    disabled={!p.barcode}
+                    onClick={() => setLabelProduct(p)}
+                  >
+                    Label
+                  </button>
+                </div>,
+              ])}
+            />
+            <p className="retail-help">
+              {t(
+                "Use Purchases to receive new stock. Edit / count sets the total quantity physically on the shelf.",
+                "नवीन साठा खरेदीतून जोडा. बदला / मोजा म्हणजे दुकानातील प्रत्यक्ष एकूण संख्या.",
+              )}
+            </p>
+            <section className="retail-panel">
+              <h3>{t("Today’s stock movements", "आजच्या साठ्याच्या नोंदी")}</h3>
+              <Table
+                headers={["Product", "Change", "Reason", "Date"]}
+                rows={data.movements.map((m) => [
+                  m.item_name,
+                  m.quantity,
+                  m.reason,
+                  date(m.created_at),
+                ])}
+              />
+            </section>
+          </>
+        )}
+        {view === "bills" && (
+          <>
+            <Table
+              headers={["Bill", "Customer", "Total", "Paid", "Date", "Action"]}
+              rows={data.invoices.map((i) => [
+                i.number,
+                i.customer.name || "Walk-in",
+                cash(i.total),
+                cash(i.paid),
+                date(i.created_at),
+                <div className="retail-row-actions" key={i.id}>
+                  <button onClick={() => setReceipt(i)}>Receipt</button>
+                  {data.returnedIds.includes(i.id) ? (
+                    <span>Returned</span>
+                  ) : (
+                    <button
+                      onClick={() => setDialog({ type: "return", id: i.id })}
+                    >
+                      Return full bill
+                    </button>
+                  )}
+                </div>,
+              ])}
+            />
+            {data.returns.length > 0 && (
+              <section className="retail-panel">
+                <h3>Returns in selected period</h3>
+                <Table
+                  headers={["Bill", "Reversed sale", "Refund", "Date"]}
+                  rows={data.returns.map((r) => [
+                    r.number,
+                    cash(r.total),
+                    cash(r.refund),
+                    date(r.created_at),
+                  ])}
+                />
+              </section>
+            )}
+          </>
+        )}
+        {(view === "customers" || view === "suppliers") && (
+          <>
+            <div className="retail-toolbar">
+              <input
+                placeholder={t("Search name or phone", "नाव किंवा फोन शोधा")}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+              <button
+                className="primary"
+                onClick={() =>
+                  setDialog({
+                    type: view === "customers" ? "customer" : "supplier",
+                  })
+                }
+              >
+                <Plus size={17} />
+                {view === "customers"
+                  ? t("Add customer", "ग्राहक जोडा")
+                  : t("Add supplier", "पुरवठादार जोडा")}
+              </button>
+            </div>
+            <Table
+              headers={["Name", "Phone", "Outstanding", "Actions"]}
+              rows={data.contacts
+                .filter(
+                  (c) =>
+                    c.kind ===
+                      (view === "customers" ? "customer" : "supplier") &&
+                    `${c.name} ${c.phone}`
+                      .toLowerCase()
+                      .includes(query.toLowerCase()),
+                )
+                .map((c) => [
+                  c.name,
+                  c.phone || "—",
+                  cash(c.balance),
+                  <div className="retail-row-actions" key={c.id}>
+                    <button
+                      disabled={c.balance <= 0}
+                      onClick={() => setDialog({ type: "settle", id: c.id })}
+                    >
+                      {c.kind === "customer"
+                        ? "Receive payment"
+                        : "Pay supplier"}
+                    </button>
+                    <button onClick={() => setSelectedContact(c.id)}>
+                      Statement
+                    </button>
+                  </div>,
+                ])}
+            />
+            {selectedContact && (
+              <section className="retail-panel">
+                <h3>
+                  {data.contacts.find((c) => c.id === selectedContact)?.name} ·{" "}
+                  {t("Statement", "हिशोब")}
+                </h3>
+                <p>
+                  Entries in the selected date range. Outstanding is the
+                  all-time balance.
+                </p>
+                <div className="retail-dates">
+                  <label>
+                    From
+                    <input
+                      type="date"
+                      value={from}
+                      onChange={(e) => setFrom(e.target.value)}
+                    />
+                  </label>
+                  <label>
+                    To
+                    <input
+                      type="date"
+                      value={to}
+                      onChange={(e) => setTo(e.target.value)}
+                    />
+                  </label>
+                </div>
+                <Table
+                  headers={["Entry", "Amount", "Date"]}
+                  rows={[
+                    ...data.invoices
+                      .filter((i) => i.customer_id === selectedContact)
+                      .map((i) => [
+                        `Bill ${i.number} · unpaid at issue`,
+                        cash(i.total - i.paid),
+                        date(i.created_at),
+                      ]),
+                    ...data.purchases
+                      .filter((p) => p.supplier_id === selectedContact)
+                      .map((p) => [
+                        `Purchase ${p.reference} · unpaid at issue`,
+                        cash(p.total - p.paid),
+                        date(p.created_at),
+                      ]),
+                    ...data.payments
+                      .filter((p) => p.contact_id === selectedContact)
+                      .map((p) => [
+                        `Payment · ${p.method}`,
+                        cash(p.amount),
+                        date(p.created_at),
+                      ]),
+                  ]}
+                />
+              </section>
+            )}
+          </>
+        )}
+        {view === "cash" && (
+          <>
+            <div className="retail-kpis">
+              <Kpi
+                label="Opening cash"
+                value={cash(
+                  data.registers.find((r) => !r.closed_at)?.opening || 0,
+                )}
+              />
+              <Kpi
+                label="Expected cash now"
+                value={cash(
+                  data.registers.find((r) => !r.closed_at)?.currentExpected ||
+                    0,
+                )}
+              />
+              <Kpi label="Expenses in range" value={cash(summary!.expenses)} />
+            </div>
+            <div className="retail-toolbar">
+              <button
+                className="primary"
+                onClick={() =>
+                  setDialog({
+                    type: data.registers.some((r) => !r.closed_at)
+                      ? "register_close"
+                      : "register_open",
+                  })
+                }
+              >
+                {data.registers.some((r) => !r.closed_at)
+                  ? t("Close register", "रोकड हिशोब बंद करा")
+                  : t("Open register", "रोकड हिशोब सुरू करा")}
+              </button>
+              <button onClick={() => setDialog({ type: "expense" })}>
+                {t("Record expense", "खर्च नोंदवा")}
+              </button>
+            </div>
+            <Table
+              headers={[
+                "Opened",
+                "Opening",
+                "Expected",
+                "Counted",
+                "Difference",
+                "Status",
+              ]}
+              rows={data.registers.map((r) => [
+                date(r.opened_at),
+                cash(r.opening),
+                cash(r.currentExpected),
+                r.closed_at ? cash(r.counted) : "—",
+                r.closed_at ? cash(r.counted - r.expected) : "—",
+                r.closed_at ? "Closed" : "Open",
+              ])}
+            />
+            <h3 className="retail-subheading">Expenses</h3>
+            <Table
+              headers={["Description", "Amount", "Method", "Date"]}
+              rows={data.expenses.map((e) => [
+                e.description,
+                cash(e.amount),
+                e.method,
+                date(e.created_at),
+              ])}
+            />
+          </>
+        )}
+        {view === "reports" && (
+          <>
+            <div className="retail-kpis">
+              {[
+                ["Sales incl. tax", summary!.sales],
+                ["Tax collected", summary!.tax],
+                ["Gross profit", summary!.gross],
+                ["Expenses", summary!.expenses],
+                ["Net after recorded expenses", summary!.net],
+                ["Customer dues (all time)", summary!.receivable],
+                ["Supplier dues (all time)", summary!.payable],
+              ].map(([label, value]) => (
+                <Kpi
+                  key={label}
+                  label={String(label)}
+                  value={cash(Number(value))}
+                />
+              ))}
+            </div>
+            <div className="retail-toolbar">
+              <button
+                onClick={() =>
+                  downloadCsv(`report-${from}-${to}.csv`, [
+                    ["Shop", data.shop.name],
+                    ["From", from],
+                    ["To", to],
+                    ...Object.entries(summary!).map(([k, v]) => [k, v]),
+                    [],
+                    [
+                      "Bill",
+                      "Date",
+                      "Net",
+                      "Tax",
+                      "Total",
+                      "Cost",
+                      "Paid",
+                      "Method",
+                    ],
+                    ...data.invoices.map((i) => [
+                      i.number,
+                      i.created_at,
+                      i.subtotal,
+                      i.tax,
+                      i.total,
+                      i.cost,
+                      i.paid,
+                      i.method,
+                    ]),
+                    [],
+                    ["Returns", "Date", "Total", "Tax", "Refund"],
+                    ...data.returns.map((r) => [
+                      r.number,
+                      r.created_at,
+                      r.total,
+                      r.tax,
+                      r.refund,
+                    ]),
+                  ])
+                }
+              >
+                <Download size={17} />
+                Export report CSV
+              </button>
+              <button
+                onClick={() =>
+                  downloadCsv(`gst-sales-${from}-${to}.csv`, [
+                    [
+                      "Bill",
+                      "Date",
+                      "Customer GSTIN",
+                      "Place of supply",
+                      "Taxable value",
+                      "CGST",
+                      "SGST/UTGST",
+                      "IGST",
+                      "Total",
+                    ],
+                    ...data.invoices.map((i) => [
+                      i.number,
+                      i.created_at,
+                      i.customer.gstin || "",
+                      i.supply_state,
+                      i.subtotal,
+                      i.interstate ? 0 : Math.floor(i.tax * 50) / 100,
+                      i.interstate ? 0 : i.tax - Math.floor(i.tax * 50) / 100,
+                      i.interstate ? i.tax : 0,
+                      i.total,
+                    ]),
+                  ])
+                }
+              >
+                Export tax sales register
+              </button>
+            </div>
+            <p className="retail-help">
+              Reports reflect recorded transactions and full-bill returns.
+              Legacy single-item sales have no payment method or GST breakdown.
+              The tax sales register is an accounting export, not a filed GST
+              return; returns are listed separately in the report export.
+            </p>
+            <Table
+              headers={["Method", "Initial collections"]}
+              rows={["cash", "upi", "card", "credit"].map((m) => [
+                m,
+                cash(
+                  data.invoices
+                    .filter((i) => i.method === m)
+                    .reduce((n, i) => n + Number(i.paid), 0),
+                ),
+              ])}
+            />
+          </>
+        )}
+        {view === "recurring" && (
+          <>
+            <div className="retail-toolbar">
+              <button
+                className="primary"
+                onClick={() => setDialog({ type: "recurring" })}
+              >
+                {t("Create recurring template", "नियमित बिल तयार करा")}
+              </button>
+            </div>
+            <p className="retail-help">
+              Due bills are reviewed and generated here. Each run creates one
+              credit bill and advances the due date only after success. Skip a
+              delivery or pause the template anytime.
+            </p>
+            <Table
+              headers={[
+                "Template",
+                "Customer",
+                "Cycle",
+                "Next date",
+                "Actions",
+              ]}
+              rows={data.recurring.map((r) => [
+                r.name,
+                data.contacts.find((c) => c.id === r.customer_id)?.name || "",
+                r.cadence,
+                r.next_date,
+                <div className="retail-row-actions" key={r.id}>
+                  <button
+                    disabled={busy || !r.active || r.next_date > today()}
+                    onClick={async () => {
+                      const i = await perform("recurring_run", { id: r.id });
+                      if (i) setReceipt(i as Invoice);
+                    }}
+                  >
+                    Generate due bill
+                  </button>
+                  <button
+                    disabled={busy}
+                    onClick={() => perform("recurring_skip", { id: r.id })}
+                  >
+                    Skip
+                  </button>
+                  <button
+                    disabled={busy}
+                    onClick={() => perform("recurring_toggle", { id: r.id })}
+                  >
+                    {r.active ? "Pause" : "Resume"}
+                  </button>
+                </div>,
+              ])}
+            />
+          </>
+        )}
+        {view === "settings" && (
+          <form
+            className="retail-settings"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              await perform(
+                "settings",
+                Object.fromEntries(new FormData(e.currentTarget)),
+              );
+            }}
+          >
+            <h3>{t("Receipt & tax details", "पावती व कर माहिती")}</h3>
+            <p>
+              Configure each shop separately. Leave GSTIN empty for non-GST
+              receipts. Selling prices are tax-inclusive.
+            </p>
+            <div className="retail-form-grid">
+              <Field
+                name="address"
+                label="Shop address"
+                value={data.shop.settings.address}
+              />
+              <Field
+                name="state"
+                label="State name and code"
+                value={data.shop.settings.state}
+              />
+              <Field
+                name="gstin"
+                label="GSTIN (registered shops only)"
+                value={data.shop.settings.gstin}
+              />
+              <Field
+                name="phone"
+                label="Phone"
+                value={data.shop.settings.phone}
+              />
+              <Field name="upi" label="UPI ID" value={data.shop.settings.upi} />
+              <label>
+                Receipt width
+                <select
+                  name="paper"
+                  defaultValue={data.shop.settings.paper || "80"}
+                >
+                  <option value="80">80 mm</option>
+                  <option value="58">58 mm</option>
+                </select>
+              </label>
+              <Field
+                name="receiptNote"
+                label="Receipt footer"
+                value={data.shop.settings.receiptNote}
+              />
+            </div>
+            <button className="primary" disabled={busy}>
+              Save shop settings
+            </button>
+            <p className="retail-help">
+              Print / PDF uses the device’s print dialog. Configure your thermal
+              printer in the operating system. Bluetooth/USB device support must
+              be checked on your actual hardware.
+            </p>
+          </form>
+        )}
+      </div>
+      {receipt && (
+        <Receipt invoice={receipt} onClose={() => setReceipt(null)} />
+      )}
+      {scan && (
+        <ScanBarcode
+          onClose={() => setScan(false)}
+          onFound={(code) => {
+            const p = data.products.find((p) => p.barcode === code);
+            if (p) {
+              add(p);
+              setNotice(`Added ${p.name}`);
+            } else setError(`Barcode ${code} is not in this shop’s catalog.`);
+            setScan(false);
+          }}
+        />
+      )}
+      {labelProduct && (
+        <BarcodeLabel
+          product={labelProduct}
+          onClose={() => setLabelProduct(null)}
+        />
+      )}
+      {purchaseScan && (
+        <PurchaseScan
+          products={data.products}
+          onClose={() => setPurchaseScan(false)}
+          onReview={(lines) => {
+            setPurchaseCart(lines);
+            setPurchaseScan(false);
+            setNotice(
+              "Review the supplier, reference and payment before saving this purchase.",
+            );
+          }}
+        />
+      )}
+      {dialog && (
+        <FormDialog
+          title={
+            dialog.type === "product"
+              ? dialog.product
+                ? "Edit product / stock count"
+                : "Add product"
+              : dialog.type === "import"
+                ? "Review product import"
+                : dialog.type.replaceAll("_", " ")
+          }
+          busy={busy}
+          onClose={() => {
+            if (!busy) setDialog(null);
+          }}
+          onSubmit={async (e) => {
+            e.preventDefault();
+            const f = Object.fromEntries(new FormData(e.currentTarget));
+            let action = dialog.type;
+            let payload: Record<string, unknown> = f;
+            if (action === "product")
+              payload = {
+                ...f,
+                id: dialog.product?.id || "",
+                expectedStock: dialog.product?.stock,
+              };
+            if (action === "customer" || action === "supplier") {
+              payload = { ...f, kind: action };
+              action = "contact";
+            }
+            if (action === "settle") payload = { ...f, contactId: dialog.id };
+            if (action === "return") payload = { ...f, id: dialog.id };
+            if (action === "recurring")
+              payload = {
+                ...f,
+                lines: [
+                  {
+                    id: f.productId,
+                    qty: Number(f.qty),
+                    price: Number(f.price),
+                    discount: 0,
+                  },
+                ],
+              };
+            if (action === "import") {
+              await importNow();
+              return;
+            }
+            const r = await perform(action, payload);
+            if (r) setDialog(null);
+          }}
+        >
+          {dialog.type === "product" && (
+            <>
+              <Field
+                name="name"
+                label="Product name"
+                value={dialog.product?.name}
+                required
+              />
+              <Field
+                name="category"
+                label="Category"
+                value={dialog.product?.category || "General"}
+                required
+              />
+              <div className="retail-form-grid">
+                <Field
+                  name="cost"
+                  label="Buy price"
+                  value={dialog.product?.buying_price ?? 0}
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  required
+                />
+                <Field
+                  name="price"
+                  label="Sell price (tax included)"
+                  value={dialog.product?.default_selling_price ?? 0}
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  required
+                />
+                <Field
+                  name="stock"
+                  label="Counted available quantity"
+                  value={dialog.product?.stock ?? 0}
+                  type="number"
+                  min="0"
+                  step="0.001"
+                  required
+                />
+                <Field
+                  name="reorder"
+                  label="Restock at"
+                  value={dialog.product?.reorder_level ?? 5}
+                  type="number"
+                  min="0"
+                  step="0.001"
+                  required
+                />
+                <label>
+                  Unit
+                  <select
+                    name="unit"
+                    defaultValue={dialog.product?.unit || "pcs"}
+                  >
+                    {["pcs", "kg", "g", "litre", "ml", "pack"].map((u) => (
+                      <option key={u}>{u}</option>
+                    ))}
+                  </select>
+                </label>
+                <Field
+                  name="barcode"
+                  label="Barcode"
+                  value={dialog.product?.barcode}
+                />
+                <Field name="hsn" label="HSN" value={dialog.product?.hsn} />
+                <Field
+                  name="tax"
+                  label="GST rate %"
+                  value={dialog.product?.tax_rate ?? 0}
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  required
+                />
+                <Field
+                  name="expiry"
+                  label="Expiry date (optional)"
+                  value={dialog.product?.expiry_date || ""}
+                  type="date"
+                />
+              </div>
+            </>
+          )}
+          {(dialog.type === "customer" || dialog.type === "supplier") && (
+            <>
+              <Field name="name" label="Name" required />
+              <Field name="phone" label="Phone" />
+              <Field name="address" label="Address" />
+              <Field name="gstin" label="GSTIN (optional)" />
+            </>
+          )}
+          {["expense", "settle", "register_open", "register_close"].includes(
+            dialog.type,
+          ) && (
+            <>
+              <Field
+                name="amount"
+                label={
+                  dialog.type === "register_close"
+                    ? "Counted cash"
+                    : dialog.type === "register_open"
+                      ? "Opening cash"
+                      : "Amount"
+                }
+                type="number"
+                min={dialog.type.startsWith("register") ? "0" : "0.01"}
+                step="0.01"
+                required
+              />
+              {dialog.type === "settle" && (
+                <p>
+                  Outstanding:{" "}
+                  {cash(
+                    data.contacts.find((c) => c.id === dialog.id)?.balance || 0,
+                  )}
+                </p>
+              )}
+              {dialog.type === "expense" && (
+                <Field
+                  name="description"
+                  label="Expense description"
+                  required
+                />
+              )}
+              {dialog.type === "register_close" && (
+                <Field name="note" label="Closing note" />
+              )}
+              {!dialog.type.startsWith("register") && <Method />}
+            </>
+          )}
+          {dialog.type === "return" && (
+            <>
+              <p>
+                This returns every item on the bill, restores stock and reverses
+                the sale in reports. The server calculates any amount to refund,
+                including settled customer credit.
+              </p>
+              <Field name="reason" label="Return reason" required />
+              <Method />
+            </>
+          )}
+          {dialog.type === "recurring" && (
+            <>
+              <Field name="name" label="Template name" required />
+              <label>
+                Customer
+                <select name="contactId" required>
+                  <option value="">Choose customer</option>
+                  {data.contacts
+                    .filter((c) => c.kind === "customer")
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label>
+                Product
+                <select name="productId" required>
+                  <option value="">Choose product</option>
+                  {data.products.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Field
+                name="qty"
+                label="Quantity"
+                type="number"
+                min="0.001"
+                step="0.001"
+                value="1"
+                required
+              />
+              <Field
+                name="price"
+                label="Unit price"
+                type="number"
+                min="0"
+                step="0.01"
+                required
+              />
+              <label>
+                Cycle
+                <select name="cadence">
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                </select>
+              </label>
+              <Field
+                name="nextDate"
+                label="First due date"
+                type="date"
+                value={today()}
+                required
+              />
+            </>
+          )}
+          {dialog.type === "import" && (
+            <>
+              <p>
+                {importRows.length} new products. Existing products are not
+                overwritten. {importDone} saved.
+              </p>
+              <Table
+                headers={["Name", "Category", "Stock", "Price"]}
+                rows={importRows
+                  .slice(0, 20)
+                  .map((p) => [p.name, p.category, p.stock, p.price])}
+              />
+              <p>
+                Review values before saving. If a row fails, already saved
+                products are kept and the next attempt resumes at that row.
+              </p>
+            </>
+          )}
+          {error && (
+            <p className="retail-error" role="alert">
+              {error}
+            </p>
+          )}
+        </FormDialog>
+      )}
+    </section>
+  );
+}
+function date(s: string) {
+  return new Date(s).toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+function Empty({ children }: { children: ReactNode }) {
+  return <div className="retail-empty">{children}</div>;
+}
+function Kpi({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="retail-kpi">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+function Table({ headers, rows }: { headers: string[]; rows: ReactNode[][] }) {
+  return rows.length ? (
+    <div className="retail-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            {headers.map((h) => (
+              <th key={h} scope="col">
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={i}>
+              {row.map((c, j) => (
+                <td key={j}>{c}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  ) : (
+    <Empty>No records yet.</Empty>
+  );
+}
+function Field({
+  name,
+  label,
+  value,
+  type = "text",
+  required = false,
+  min,
+  max,
+  step,
+}: {
+  name: string;
+  label: string;
+  value?: string | number;
+  type?: string;
+  required?: boolean;
+  min?: string;
+  max?: string;
+  step?: string;
+}) {
+  return (
+    <label>
+      {label}
+      <VoiceInput
+        name={name}
+        defaultValue={value}
+        type={type}
+        required={required}
+        min={min}
+        max={max}
+        step={step}
+      />
+    </label>
+  );
+}
+function Method() {
+  return (
+    <label>
+      Payment method
+      <select name="method">
+        <option value="cash">Cash</option>
+        <option value="upi">UPI</option>
+        <option value="card">Card</option>
+      </select>
+    </label>
+  );
+}
+function FormDialog({
+  title,
+  children,
+  busy,
+  onClose,
+  onSubmit,
+}: {
+  title: string;
+  children: ReactNode;
+  busy: boolean;
+  onClose: () => void;
+  onSubmit: (e: FormEvent<HTMLFormElement>) => void;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const element = ref.current;
+    element?.showModal();
+    return () => element?.close();
+  }, []);
+  return (
+    <dialog
+      ref={ref}
+      className="retail-dialog"
+      onCancel={(e) => {
+        if (busy) e.preventDefault();
+        else onClose();
+      }}
+      aria-labelledby="retail-form-title"
+    >
+      <form onSubmit={onSubmit}>
+        <header>
+          <h2 id="retail-form-title">{title}</h2>
+          <button type="button" onClick={onClose} disabled={busy}>
+            Cancel
+          </button>
+        </header>
+        <fieldset disabled={busy}>{children}</fieldset>
+        <footer>
+          <button className="primary" disabled={busy}>
+            {busy ? "Saving…" : "Save"}
+          </button>
+        </footer>
+      </form>
+    </dialog>
+  );
+}
