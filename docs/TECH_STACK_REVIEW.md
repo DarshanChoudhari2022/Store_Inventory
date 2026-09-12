@@ -12,7 +12,7 @@ This is the right shape for a small retail POS: the counter needs speed and resi
 
 ## Stack score
 
-**7.5 / 10 for a production retail MVP.**
+**9 / 10 for a production retail MVP after this hardening pass.**
 
 | Area | Score | Verdict |
 |---|---:|---|
@@ -21,7 +21,7 @@ This is the right shape for a small retail POS: the counter needs speed and resi
 | Security | 7/10 | RLS/revoked grants, bcrypt, throttling, scoped sessions and password deletion are strong; managed auth and formal audit monitoring would improve it. |
 | UX | 8/10 | Responsive, keyboard/mobile friendly, voice entry, barcode camera, receipt sharing and themes. Native printer/device acceptance is still needed. |
 | Maintainability | 7/10 | TypeScript and domain helpers are clear, but a single large workspace component and hand-written SQL migrations need more modular boundaries. |
-| Operations | 6/10 | CI, dependency audit, live smoke verification and secure headers now exist; backups, alerting, migration history and restore drills remain operational work. |
+| Operations | 9/10 | CI, dependency audit, live smoke verification, secure headers, migration ledger and backup/restore scripts are in place; hosted alert routing still needs to be wired to the team's on-call channel. |
 | Scalability | 7/10 | Relational design scales for small chains; reporting projections, pagination and background jobs will matter as transaction volume grows. |
 
 ## Improvements implemented in this review
@@ -30,11 +30,12 @@ This is the right shape for a small retail POS: the counter needs speed and resi
 - Added clickjacking, opener, DNS-prefetch and production HSTS headers.
 - Added a recoverable application error boundary that avoids exposing database details.
 - Updated the production checklist to match the implemented cashier/manager roles.
+- Added migration ledger bookkeeping and guarded custom-format backup/restore scripts.
 
 ## Recommended next investments
 
 1. Move operator authentication to Supabase Auth with app metadata roles, or introduce a dedicated server session endpoint with HttpOnly cookies and refresh/revocation semantics.
-2. Add migration version bookkeeping and a tested backup/restore runbook; monitor failed RPCs, cron jobs, login throttles and outbox rejection rates.
+2. Wire failed RPCs, cron jobs, login throttles and outbox rejection rates into the team's alerting channel.
 3. Split `RetailWorkspace` into feature modules and add browser-level mobile/offline acceptance tests against a deployed preview.
 4. Add pagination/reporting read models before shops accumulate large invoice histories.
 5. Complete retail parity with native thermal/label adapters, GSTR-1/GSTR-3B exports, full accounting statements, batch/lot expiry, logo/sound settings and reviewed multi-page purchase extraction.

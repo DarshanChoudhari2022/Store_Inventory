@@ -10,6 +10,8 @@ Validated September 12, 2026. This is a retail POS; restaurant workflows are out
 - Keep `DATABASE_URL` only in ignored local environment or a protected migration runner. Never configure it as a public variable or put it in the browser bundle.
 - Run `npm run migrate:retail` before the release. It applies the complete base and retail migrations in one transaction, preserves existing records, and refreshes PostgREST. Migration connections verify Supabase's certificate using the bundled public CA.
 - Run `npm run verify:live`. It creates temporary accounts inside a transaction, verifies independent shops, retry-safe checkout, balances, and denied cross-shop access, then rolls back all verification records. It also checks the scheduler registration.
+- Run `npm run backup:db` on the protected migration host and retain encrypted custom-format dumps. Test recovery with `RESTORE_CONFIRM=YES BACKUP_FILE=... npm run restore:db` against a non-production database before launch and at least quarterly.
+- `schema_migrations` records the release SQL set applied by the migration scripts; review it during deployments.
 - Newly created shops start empty. Existing records are preserved. No default credentials are seeded.
 
 ## Operations

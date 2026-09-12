@@ -15,6 +15,8 @@
     "typecheck": "next typegen && tsc --noEmit",
     "migrate:retail": "node scripts/migrate-retail.mjs",
     "verify:live": "node scripts/verify-live-retail.mjs"
+    ,"backup:db": "node scripts/backup-database.mjs"
+    ,"restore:db": "node scripts/restore-database.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",
