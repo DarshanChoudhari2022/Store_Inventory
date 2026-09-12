@@ -1,4 +1,5 @@
 -- Additive retail operations. All writes are transactional, authenticated and shop-scoped.
+alter table app_sessions add column if not exists staff_role text;
 alter table shops add column if not exists active boolean not null default true;
 alter table shops add column if not exists settings jsonb not null default '{}';
 alter table items alter column stock type numeric(14,3);
@@ -150,6 +151,7 @@ declare
  method text; v_expected numeric; v_date date:=(now() at time zone 'Asia/Kolkata')::date; v_inter boolean:=false;
 begin
  if not can_access_shop(p_token,p_shop_id) then raise exception 'Shop access required'; end if;
+ if exists(select 1 from app_sessions where token=p_token and staff_role='cashier') and p_action in ('product','purchase','expense','register_open','register_close','return','settings','recurring','recurring_run','recurring_skip','recurring_toggle') then raise exception 'Cashier accounts can bill and collect payments only'; end if;
  if p_request_id is null or p_action is null or p_data is null then raise exception 'Request details required'; end if;
  perform pg_advisory_xact_lock(hashtextextended(p_shop_id::text,0));
  -- Recheck access after waiting for another transaction.

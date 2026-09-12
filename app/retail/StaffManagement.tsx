@@ -1,7 +1,7 @@
 "use client";
 import {useEffect,useRef,useState,type FormEvent} from 'react';
 import VoiceInput from './VoiceInput';
-type Staff={id:string;name:string;username:string;active:boolean};
+type Staff={id:string;name:string;username:string;role:'cashier'|'manager';active:boolean};
 type Rpc=(action:string,data:Record<string,unknown>)=>Promise<Staff[]>;
 export default function StaffManagement({shopName,rpc}:{shopName:string;rpc:Rpc}){
  const [rows,setRows]=useState<Staff[]>([]),[error,setError]=useState(''),[busy,setBusy]=useState(false),[loaded,setLoaded]=useState(false);
@@ -16,22 +16,23 @@ export default function StaffManagement({shopName,rpc}:{shopName:string;rpc:Rpc}
  }
  async function create(event:FormEvent<HTMLFormElement>){
   event.preventDefault();const form=event.currentTarget;const values=new FormData(form);const secret=password();const username=String(values.get('username')).trim().toLowerCase();
-  if(await change('create',{name:values.get('name'),username,password:secret})){setCredential({username,password:secret});form.reset();}
+  if(await change('create',{name:values.get('name'),username,password:secret,role:values.get('role')||'cashier'})){setCredential({username,password:secret});form.reset();}
  }
  return <details className="staff-management owner-controls panel border p-4 my-4">
   <summary>Staff access · {shopName}</summary>
-  <p className="text-sm my-3">Each operator has full access to this shop, including stock, bills and reports. Only the super admin can manage staff accounts.</p>
+  <p className="text-sm my-3">Managers have full shop access. Cashiers can bill, collect payments and manage customer contacts; catalogue, purchasing, expenses and settings stay owner-controlled.</p>
   {error&&<p role="alert" className="retail-error">{error}</p>}
   {!loaded&&!error&&<p role="status">Loading staff…</p>}
   {loaded&&!rows.length&&<p>No individual operators yet.</p>}
   <div className="grid gap-3 my-4">{rows.map(row=><div key={row.id} className="flex flex-wrap items-center gap-3 border p-3">
-   <div className="min-w-0 flex-1"><strong>{row.name}</strong><p className="break-all">{row.username} · {row.active?'Active':'Paused'}</p></div>
+   <div className="min-w-0 flex-1"><strong>{row.name}</strong><p className="break-all">{row.username} · {row.role} · {row.active?'Active':'Paused'}</p></div>
    <button type="button" className="border p-2" disabled={busy} onClick={()=>void change(row.active?'pause':'resume',{id:row.id})}>{row.active?'Pause access':'Resume access'}</button>
    <details><summary className="cursor-pointer p-2">Reset password</summary><p className="text-sm my-2">This signs the operator out. Share the new password with them.</p><button className="border p-2" disabled={busy} type="button" onClick={async()=>{const secret=password();if(await change('reset',{id:row.id,password:secret}))setCredential({username:row.username,password:secret});}}>Generate new password</button></details>
   </div>)}</div>
   <form onSubmit={create} className="grid gap-3 sm:grid-cols-2">
    <label>Operator name<VoiceInput className="block w-full border p-3" name="name" required maxLength={120}/></label>
    <label>Username<VoiceInput className="block w-full border p-3" name="username" required minLength={3} maxLength={80} pattern="[a-zA-Z0-9][a-zA-Z0-9._-]{2,79}" autoComplete="off"/></label>
+   <label>Access level<select className="block w-full border p-3" name="role" defaultValue="cashier"><option value="cashier">Cashier · billing only</option><option value="manager">Manager · full shop access</option></select></label>
    <button className="border p-3" disabled={busy||!loaded}>{busy?'Saving…':'Create operator login'}</button>
   </form>
   {credential&&<div role="status" className="border p-4 my-4"><p>New login: <strong>{credential.username}</strong></p><p className="break-all">Temporary display: <code>{credential.password}</code></p><p className="text-sm">Share it privately. This password is shown only here and cannot be retrieved later.</p><button type="button" className="border p-2 mt-2" onClick={()=>setCredential(null)}>Hide password</button></div>}

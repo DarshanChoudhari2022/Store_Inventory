@@ -8,13 +8,13 @@ test('individual operators are shop isolated, revocable and confirm with their o
  const db=new PGlite({extensions:{pgcrypto}});
  try{
   await db.exec('create role anon;create role authenticated;create schema extensions;');
-  for(const file of ['schema.sql','inventory-operations.sql','migrations/20260912_retail_pos.sql','migrations/20260914_auth_limits.sql','migrations/20260915_product_control.sql','migrations/20260916_shop_staff.sql'])await db.exec(await readFile(new URL('../supabase/'+file,import.meta.url),'utf8'));
+  for(const file of ['schema.sql','inventory-operations.sql','migrations/20260912_retail_pos.sql','migrations/20260914_auth_limits.sql','migrations/20260915_product_control.sql','migrations/20260916_shop_staff.sql','migrations/20260917_staff_roles.sql'])await db.exec(await readFile(new URL('../supabase/'+file,import.meta.url),'utf8'));
   const call=async(name,args)=>(await db.query(`select ${name}(${args.map((_,i)=>'$'+(i+1)).join(',')}) r`,args)).rows[0].r;
   await db.query("insert into owner_accounts(username,password_hash) values('owner',crypt('owner-test-password',gen_salt('bf')))");
   const owner=await call('login_user',['owner','owner-test-password']);
   const a=await call('create_shop',[owner.token,'Shop A','Test','shop-a','shop-test-password']);
   const b=await call('create_shop',[owner.token,'Shop B','Test','shop-b','shop-test-password']);
-  const staff=(await call('manage_shop_staff',[owner.token,a.id,'create',JSON.stringify({name:'Operator A',username:'operator-a',password:'operator-test-password'})]))[0];
+  const staff=(await call('manage_shop_staff',[owner.token,a.id,'create',JSON.stringify({name:'Operator A',username:'operator-a',password:'operator-test-password',role:'manager'})]))[0];
   assert.equal(staff.username,'operator-a');assert.equal(staff.password_hash,undefined);
   await assert.rejects(call('create_shop',[owner.token,'Collision','Test','OPERATOR-A','shop-test-password']),/exists/);
   await assert.rejects(call('manage_shop_staff',[owner.token,a.id,'create',JSON.stringify({name:'Duplicate',username:'shop-a',password:'operator-test-password'})]),/exists/);
@@ -35,6 +35,10 @@ test('individual operators are shop isolated, revocable and confirm with their o
   assert.equal(await call('can_access_shop',[operator.token,a.id]),false);
   assert.match((await call('login_user',['operator-a','operator-test-password'])).error,/Invalid/);
   assert.ok((await call('login_user',['operator-a','new-operator-password'])).token);
+  const cashier=(await call('manage_shop_staff',[owner.token,a.id,'create',JSON.stringify({name:'Cashier A',username:'cashier-a',password:'cashier-test-password',role:'cashier'})])).find(row=>row.username==='cashier-a');
+  const cashierSession=await call('login_user',['cashier-a','cashier-test-password']);
+  assert.equal(cashier.role, 'cashier');
+  await assert.rejects(call('retail_action',[cashierSession.token,a.id,crypto.randomUUID(),'expense',JSON.stringify({description:'Blocked',amount:10,method:'cash'})]),/Cashier accounts/);
   await call('admin_update_shop',[owner.token,a.id,'Shop A','Test',false]);
   assert.match((await call('login_user',['operator-a','new-operator-password'])).error,/Invalid/);
   await db.exec('set role anon');await assert.rejects(db.query('select * from shop_staff'),/permission denied/);

@@ -65,6 +65,7 @@ type Session = {
   token: string;
   role: 'owner' | 'shop';
   shopId?: string;
+  staffRole?: 'cashier' | 'manager';
 };
 
 type CredentialNote = {
@@ -524,6 +525,7 @@ export default function Home() {
         token: String(login.token),
         role: login.role === 'owner' ? 'owner' : 'shop',
         shopId: login.shopId ? String(login.shopId) : undefined,
+        staffRole: login.staffRole === 'cashier' ? 'cashier' : login.role === 'shop' ? 'manager' : undefined,
       };
       setSession(nextSession);
       window.localStorage.setItem(sessionKey, JSON.stringify(nextSession));
@@ -868,6 +870,7 @@ export default function Home() {
             sessionId={session.token}
             shopId={dashboard.shop.id}
             lang={lang}
+            staffRole={session.staffRole}
             rpc={async (name, args) => {
               const { data, error, status } = await getSupabaseClient().rpc(name, { ...args, p_token: session.token });
               if (error) throw Object.assign(new Error(`${error.code}: ${error.message}`), {code:error.code,status});

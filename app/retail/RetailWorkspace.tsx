@@ -79,6 +79,7 @@ export default function RetailWorkspace({
   shopId,
   sessionId,
   lang,
+  staffRole,
   rpc,
   onChanged,
   fallback,
@@ -86,6 +87,7 @@ export default function RetailWorkspace({
   shopId: string;
   sessionId: string;
   lang: "en" | "mr";
+  staffRole?: "cashier" | "manager";
   rpc: Rpc;
   onChanged: () => Promise<void>;
   fallback?: ReactNode;
@@ -365,7 +367,7 @@ export default function RetailWorkspace({
     const timer = window.setInterval(online, 30000);
     return () => { window.removeEventListener('online', online); window.clearInterval(timer); };
   }, [shopReady, namespace]);
-  const nav: [View, string, string, typeof Package][] = [
+  const allNav: [View, string, string, typeof Package][] = [
     ["sell", "Sell", "विक्री", ShoppingCart],
     ["products", "Products", "उत्पादने", Package],
     ["bills", "Bills", "बिले", ReceiptText],
@@ -377,6 +379,10 @@ export default function RetailWorkspace({
     ["recurring", "Recurring bills", "नियमित बिले", Repeat],
     ["settings", "Shop settings", "दुकान सेटिंग्ज", Settings],
   ];
+  const nav = staffRole === "cashier" ? allNav.filter(([v]) => ["sell","bills","customers"].includes(v)) : allNav;
+  // A cashier may arrive with a manager's saved draft; return them to a permitted screen.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { if (staffRole === "cashier" && !["sell","bills","customers"].includes(view)) setView("sell"); }, [staffRole, view]);
   const purchasing = view === "purchases",
     currentCart = purchasing ? purchaseCart : cart,
     setCurrentCart = purchasing ? setPurchaseCart : setCart;

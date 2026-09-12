@@ -27,6 +27,7 @@ try {
   await client.query(await readFile(new URL('../supabase/migrations/20260914_auth_limits.sql',import.meta.url),'utf8'));
   await client.query(await readFile(new URL('../supabase/migrations/20260915_product_control.sql',import.meta.url),'utf8'));
   await client.query(await readFile(new URL('../supabase/migrations/20260916_shop_staff.sql',import.meta.url),'utf8'));
+  await client.query(await readFile(new URL('../supabase/migrations/20260917_staff_roles.sql',import.meta.url),'utf8'));
   await client.query(await readFile(new URL('../supabase/retail-cron.sql',import.meta.url),'utf8'));
   await client.query("notify pgrst, 'reload schema'");
   await client.query('commit');
