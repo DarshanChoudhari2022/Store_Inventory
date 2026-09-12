@@ -1,4 +1,9 @@
 // Device-local drafts/outbox only. The authenticated server remains authoritative.
+export function isNetworkFailure(error: unknown): boolean {
+  if (typeof error === 'object' && error !== null && 'status' in error && Number(error.status) >= 500 && (!('code' in error) || !error.code)) return true;
+  const message = error instanceof Error ? error.message : typeof error === 'object' && error !== null && 'message' in error ? String(error.message) : String(error);
+  return /failed to fetch|fetch failed|networkerror|network request failed|load failed|network connection.*lost/i.test(message);
+}
 export type PendingSale = {
   id: string;
   shopId: string;
@@ -95,4 +100,29 @@ export async function removeLocal(key: string) {
   } finally {
     db.close();
   }
+}
+
+// Call only after the server has verified access to this shop. Reauthentication
+// changes the session token; a pending bill must keep its original request ID.
+export async function recoverShopPending(shopId: string, namespace: string) {
+  const db = await open();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction("records", "readwrite");
+      const records = tx.objectStore("records");
+      const request = records.openCursor();
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (!cursor) return;
+        const sale = cursor.value as PendingSale;
+        const key = String(cursor.key);
+        if (sale?.shopId === shopId && sale.id && key.endsWith(':sale:' + sale.id)) {
+          const nextKey = namespace + ':sale:' + sale.id;
+          if (key !== nextKey) { records.put(sale, nextKey); cursor.delete(); }
+        }
+        cursor.continue();
+      };
+      tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error);
+    });
+  } finally { db.close(); }
 }

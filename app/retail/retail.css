@@ -1,4 +1,7 @@
 .retail {
+  --retail-surface: #fff;
+  --retail-background: #f5f8f6;
+  --retail-ink: #20352d;
   display: grid;
   grid-template-columns: 210px minmax(0, 1fr);
   border: 1px solid #dce5df;
@@ -9,6 +12,26 @@
   color: #20352d;
   font-size: 14px;
 }
+.retail-cash-chips { display:grid; gap:8px; }
+.retail-cash-chips > div { display:flex; flex-wrap:wrap; gap:6px; }
+.retail-cash-chips > div button { padding:7px 10px; min-height:38px; }
+.retail-settings + .retail-settings { margin-top:22px; }
+.retail, .retail button, .retail label, .retail select, .retail input, .retail-dialog label, .retail-dialog input { font-size: var(--retail-font,16px); }
+.retail .primary, .retail-dialog .primary, .retail-nav b { background:var(--retail-accent,#205b42); border-color:var(--retail-accent,#205b42); color:white; }
+.retail-nav > button[aria-current] { box-shadow: inset 3px 0 var(--retail-accent,#205b42); }
+[data-retail-theme="dark"] .dashboard-shell { background:#101b22; }
+[data-retail-theme="dark"] .retail { background:#111e26; color:#e1e9ec; border-color:#374a54; }
+[data-retail-theme="dark"] .retail :is(.retail-nav,.retail-cart,.retail-panel,.retail-settings,.retail-product,.retail-table-wrap,.retail-empty,.retail-kpi,.retail-checkout),
+[data-retail-theme="dark"] .retail :is(input,select,button),
+[data-retail-theme="dark"] .retail-dialog:not(.receipt-dialog),
+[data-retail-theme="dark"] .retail-dialog:not(.receipt-dialog) :is(input,select,textarea,button) { background:#1b2c36; color:#e1e9ec; border-color:#3e5360; }
+[data-retail-theme="dark"] .retail :is(small,p,th,.retail-product-category) { color:#bacbd3; }
+[data-retail-theme="dark"] .retail th { background:#263c48; }
+[data-retail-theme="dark"] .retail .primary,[data-retail-theme="dark"] .retail-dialog .primary { background:var(--retail-accent,#205b42); color:white; }
+[data-retail-theme="dark"] .retail-nav > button[aria-current] { background:#304852; }
+[data-retail-theme="dark"] .retail .retail-warning { background:#403620; color:#ffe4a4; }
+[data-retail-theme="dark"] .retail .retail-notice { background:#203e32; color:#d0f5de; }
+[data-retail-theme="dark"] .retail .retail-error { background:#432925; color:#ffd0c2; }
 .retail button,
 .retail-dialog button,
 .retail-loading button {
@@ -759,3 +782,6 @@
 .voice-button.listening { background: #d8f3dc; color: #b42318; animation: voice-pulse 1.1s ease-in-out infinite; }
 @keyframes voice-pulse { 50% { box-shadow: 0 0 0 4px rgba(180,35,24,.16); } }
 @media (prefers-reduced-motion: reduce) { .voice-button.listening { animation: none; } }
+.retail, .retail button, .retail label, .retail select, .retail input, .retail-dialog label, .retail-dialog input { font-size: var(--retail-font,16px); }
+.retail .primary, .retail-dialog .primary, .retail-nav b { background:var(--retail-accent,#205b42); border-color:var(--retail-accent,#205b42); color:white; }
+@media (max-width:620px) { .retail-line-fields { grid-template-columns:1fr; } }

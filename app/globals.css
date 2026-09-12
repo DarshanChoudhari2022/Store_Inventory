@@ -697,6 +697,7 @@ tbody tr:hover {
 
 .workspace-container { width: 100%; max-width: 1600px; margin: auto; padding: 24px 28px 48px; }
 .dashboard-shell { background: #f5f7f6 !important; }
+.dashboard-shell { overflow-x: hidden; }
 .dashboard-header > div { max-width: 1600px; padding: 16px 28px; }
 .dashboard-header h1 { font-size: 1.25rem; line-height: 1.4; }
 .dashboard-header > div > div:last-child { flex-wrap: wrap; }
@@ -710,3 +711,7 @@ tbody tr:hover {
   .dashboard-header > div { padding: 12px; }
   .dashboard-header h1 { font-size: 1.125rem; }
 }
+
+/* Keep the shell and header aligned with the retail appearance preference. */
+[data-retail-theme="dark"] .dashboard-shell { background: #101b22 !important; color: #e1e9ec; }
+[data-retail-theme="dark"] .dashboard-header { background: #14232c !important; border-color: #304550 !important; color: #e1e9ec; }

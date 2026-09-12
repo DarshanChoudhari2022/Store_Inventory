@@ -136,6 +136,9 @@ export type Workspace = {
     next_date: string;
     active: boolean;
     lines: CartLine[];
+    automatic?: boolean;
+    last_attempt_at?: string;
+    last_error?: string;
   }[];
   legacy: {
     qty: number;

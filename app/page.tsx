@@ -5,7 +5,8 @@ import { FormEvent, memo, useEffect, useEffectEvent, useRef, useState } from 're
 import RetailWorkspace from './retail/RetailWorkspace';
 import InventoryWorkspace from './inventory/InventoryWorkspace';
 import VoiceInput from './retail/VoiceInput';
-import { readLocal, writeLocal, clearLocalSession, listLocal } from './retail/offline';
+import { AppearanceBootstrap } from './retail/Appearance';
+import { readLocal, writeLocal, clearLocalSession, listLocal, isNetworkFailure } from './retail/offline';
 import LandingPage from './landing/LandingPage';
 import { money } from './inventory/domain';
 
@@ -413,7 +414,7 @@ export default function Home() {
   }
 
   async function loadOwner(token: string, preferredShopId?: string) {
-    if (!navigator.onLine) {
+    const restoreOwner = async () => {
       const cached = await readLocal<{shops: ShopAccount[]; summary: OwnerSummary; at:number}>(token+':owner');
       if (!cached || Date.now()-cached.at>12*60*60*1000) throw new Error('Connect to load your shops.');
       setShops(cached.shops); setOwnerSummary(cached.summary);
@@ -421,12 +422,14 @@ export default function Home() {
       if(id) await loadShop(token,id);
       return;
     }
-    const [{ data: summaryData, error: summaryError }, { data: shopsData, error: shopsError }] =
+    if (!navigator.onLine) return restoreOwner();
+    const [{ data: summaryData, error: summaryError, status: summaryStatus }, { data: shopsData, error: shopsError, status: shopsStatus }] =
       await Promise.all([
         getSupabaseClient().rpc('owner_summary', { p_token: token }),
         getSupabaseClient().rpc('list_shops', { p_token: token }),
       ]);
 
+    if (isNetworkFailure({...summaryError,status:summaryStatus}) || isNetworkFailure({...shopsError,status:shopsStatus})) return restoreOwner();
     const summary = getRpcData<Record<string, unknown>>(summaryData, summaryError);
     const shopRows = getRpcData<Record<string, unknown>[]>(shopsData, shopsError).map((shop) => ({
       id: String(shop.id),
@@ -469,16 +472,18 @@ export default function Home() {
 
   async function loadShop(token: string, shopId: string) {
     const request = ++shopRequest.current;
-    if(!navigator.onLine){
+    const restoreShop = async () => {
       const cached=await readLocal<{data:ShopDashboardData;at:number}>(token+':base:'+shopId);
       if(!cached||Date.now()-cached.at>12*60*60*1000)throw new Error('Connect once to load this shop.');
       if(request===shopRequest.current){setDashboard(cached.data);setSelectedShopId(shopId);}return;
     }
-    const { data, error } = await getSupabaseClient().rpc('get_shop_dashboard', {
+    if (!navigator.onLine) return restoreShop();
+    const { data, error, status } = await getSupabaseClient().rpc('get_shop_dashboard', {
       p_token: token,
       p_shop_id: shopId,
     });
     if (request !== shopRequest.current) return;
+    if (isNetworkFailure({...error,status})) return restoreShop();
     const raw = getRpcData<Record<string, unknown>>(data, error);
     const shop = raw.shop as Record<string, unknown>;
     const items = (raw.items as Record<string, unknown>[]).map(mapItem);
@@ -513,6 +518,7 @@ export default function Home() {
         p_password: password,
       });
       const login = getRpcData<Record<string, unknown>>(data, error);
+      if (!login.token || login.error) throw new Error(String(login.error || 'Invalid username or password'));
       const nextSession: Session = {
         token: String(login.token),
         role: login.role === 'owner' ? 'owner' : 'shop',
@@ -690,6 +696,7 @@ export default function Home() {
 
   return (
     <main className="dashboard-shell min-h-screen">
+      <AppearanceBootstrap />
       <header className="dashboard-header border-b border-[#ddd7c7] bg-white">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-5 py-4">
           <div>
@@ -844,8 +851,8 @@ export default function Home() {
         {dashboard ? (
           <RetailWorkspace
             fallback={<InventoryWorkspace data={dashboard} lang={lang} rpc={async (name, args) => {
-              const { data, error } = await getSupabaseClient().rpc(name, { ...args, p_token: session.token });
-              if (error) throw new Error(`${error.code}: ${error.message}`);
+              const { data, error, status } = await getSupabaseClient().rpc(name, { ...args, p_token: session.token });
+              if (error) throw Object.assign(new Error(`${error.code}: ${error.message}`), {code:error.code,status});
               return data;
             }} refresh={async () => {
               await loadShop(session.token, dashboard.shop.id);
@@ -856,8 +863,8 @@ export default function Home() {
             shopId={dashboard.shop.id}
             lang={lang}
             rpc={async (name, args) => {
-              const { data, error } = await getSupabaseClient().rpc(name, { ...args, p_token: session.token });
-              if (error) throw new Error(`${error.code}: ${error.message}`);
+              const { data, error, status } = await getSupabaseClient().rpc(name, { ...args, p_token: session.token });
+              if (error) throw Object.assign(new Error(`${error.code}: ${error.message}`), {code:error.code,status});
               return data;
             }}
             onChanged={async () => {

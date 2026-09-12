@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef } from "react";
 import { cash, type Invoice } from "./domain";
+import { readAppearance } from './Appearance';
 
 export default function Receipt({
   invoice,
@@ -14,7 +15,8 @@ export default function Receipt({
   useEffect(() => {
     const element = ref.current;
     element?.showModal();
-    return () => element?.close();
+    const timer = readAppearance().autoPrint ? window.setTimeout(() => window.print(), 500) : undefined;
+    return () => { if(timer)window.clearTimeout(timer); element?.close(); };
   }, []);
   const s = invoice.shop_snapshot.settings;
   useEffect(() => {

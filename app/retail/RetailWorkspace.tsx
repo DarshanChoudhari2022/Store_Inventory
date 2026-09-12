@@ -2,6 +2,7 @@
 import {
   useCallback,
   useEffect,
+  useEffectEvent,
   useRef,
   useState,
   type FormEvent,
@@ -42,11 +43,14 @@ import ScanBarcode from "./ScanBarcode";
 import BarcodeLabel from "./BarcodeLabel";
 import PurchaseScan from "./PurchaseScan";
 import VoiceInput from "./VoiceInput";
+import Appearance from './Appearance';
 import {
   readLocal,
   writeLocal,
   listLocal,
   removeLocal,
+  recoverShopPending,
+  isNetworkFailure,
   type PendingSale,
 } from "./offline";
 import "./retail.css";
@@ -64,6 +68,9 @@ type View =
   | "recurring"
   | "settings";
 type Dialog = { type: string; product?: Product; id?: string };
+type TenderDraft = {contactId:string;method:string;paid:string;reference:string;interstate:boolean;supplyState:string};
+type SavedDraft = TenderDraft & { cart: CartLine[]; purchaseCart: CartLine[]; view: View; details?: Record<string,TenderDraft> };
+const emptyTender = ():TenderDraft => ({contactId:'',method:'cash',paid:'',reference:'',interstate:false,supplyState:''});
 export default function RetailWorkspace({
   shopId,
   sessionId,
@@ -112,15 +119,23 @@ export default function RetailWorkspace({
     request = useRef<{ key: string; id: string } | null>(null),
     generation = useRef(0);
   const rpcRef = useRef(rpc);
+  const basketDetails = useRef<Record<string,TenderDraft>>({sell:emptyTender(),purchases:emptyTender()});
   useEffect(() => {
     let alive = true;
     void Promise.all([
-      readLocal<CartLine[]>(namespace + ":cart"),
+      readLocal<CartLine[] | SavedDraft>(namespace + ":cart"),
       listLocal<PendingSale>(namespace + ":sale:"),
     ])
       .then(([draft, sales]) => {
         if (alive) {
-          if (draft) setCart(draft);
+          if (Array.isArray(draft)) setCart(draft);
+          else if (draft) {
+            if(draft.details)basketDetails.current=draft.details;
+            setCart(draft.cart || []); setPurchaseCart(draft.purchaseCart || []);
+            setContactId(draft.contactId || ''); setMethod(draft.method || 'cash'); setPaid(draft.paid || '');
+            setReference(draft.reference || ''); setInterstate(Boolean(draft.interstate)); setSupplyState(draft.supplyState || '');
+            if (draft.view === 'purchases') setView('purchases');
+          }
           setPending(sales);
           setDraftReady(true);
         }
@@ -133,7 +148,10 @@ export default function RetailWorkspace({
     window.addEventListener("online", change);
     window.addEventListener("offline", change);
     if ("serviceWorker" in navigator && process.env.NODE_ENV === "production")
-      void navigator.serviceWorker.register("/retail-sw.js").catch(() => {});
+      void navigator.serviceWorker.register("/retail-sw.js").then(() => navigator.serviceWorker.ready).then(registration => {
+        const assets = performance.getEntriesByType('resource').map(entry => entry.name).filter(url => url.includes('/_next/static/'));
+        registration.active?.postMessage({type:'CACHE_APP_ASSETS',assets});
+      }).catch(() => {});
     return () => {
       alive = false;
       window.removeEventListener("online", change);
@@ -141,31 +159,40 @@ export default function RetailWorkspace({
     };
   }, [namespace]);
   useEffect(() => {
-    if (draftReady) void writeLocal(namespace + ":cart", cart).catch(() => {});
-  }, [cart, draftReady, namespace]);
+    if (draftReady) void writeLocal(namespace + ":cart", {cart, purchaseCart, contactId, method, paid, reference, interstate, supplyState, view,details:basketDetails.current}).catch(() => {});
+  }, [cart, purchaseCart, contactId, method, paid, reference, interstate, supplyState, view, draftReady, namespace]);
   useEffect(() => {
     rpcRef.current = rpc;
   }, [rpc]);
   const reload = useCallback(async () => {
     const n = ++generation.current;
-    if (!navigator.onLine) {
+    const restoreWorkspace = async () => {
       const cached = await readLocal<{ value: Workspace; at: number }>(
         namespace + ":workspace",
       );
       if (cached && Date.now() - cached.at < 12 * 60 * 60 * 1000) {
-        if (n === generation.current) setData(cached.value);
+        if (n === generation.current) { setData(cached.value); setOffline(true); }
         return;
       }
       throw new Error(
         "Connect once to load this shop. Offline access expires after 12 hours.",
       );
     }
-    const w = (await rpcRef.current("retail_workspace", {
+    if (!navigator.onLine) return restoreWorkspace();
+    let w: Workspace;
+    try { w = (await rpcRef.current("retail_workspace", {
       p_shop_id: shopId,
       p_from: from,
       p_to: to,
-    })) as Workspace;
+    })) as Workspace; } catch (error) {
+      if (isNetworkFailure(error)) return restoreWorkspace();
+      throw error;
+    }
     if (n === generation.current) {
+      await recoverShopPending(shopId, namespace);
+      setPending(await listLocal<PendingSale>(namespace + ':sale:'));
+      if (n !== generation.current) return;
+      setOffline(false);
       setData(w);
       void writeLocal(namespace + ":workspace", {
         value: w,
@@ -275,13 +302,14 @@ export default function RetailWorkspace({
       setBusy(false);
     }
   };
-  const syncPending = async () => {
+  const syncPending = async (automatic = false) => {
     if (lock.current || !navigator.onLine) return;
     lock.current = true;
     setBusy(true);
     setError("");
     try {
       const sales = await listLocal<PendingSale>(namespace + ":sale:");
+      if (!sales.some(s => !s.rejection)) return;
       for (const sale of sales.sort((a, b) =>
         a.created.localeCompare(b.created),
       )) {
@@ -303,7 +331,7 @@ export default function RetailWorkspace({
           throw e;
         }
         await removeLocal(namespace + ":sale:" + sale.id);
-        setReceipt(i);
+        if (!automatic) setReceipt(i);
       }
       setPending(await listLocal<PendingSale>(namespace + ":sale:"));
       await reload();
@@ -321,6 +349,16 @@ export default function RetailWorkspace({
       setBusy(false);
     }
   };
+  const synchronize = useEffectEvent(() => { if (data && !lock.current) void syncPending(true); });
+  const shopReady = Boolean(data);
+  useEffect(() => {
+    if (!shopReady) return;
+    synchronize();
+    const online = () => synchronize();
+    window.addEventListener('online', online);
+    const timer = window.setInterval(online, 30000);
+    return () => { window.removeEventListener('online', online); window.clearInterval(timer); };
+  }, [shopReady, namespace]);
   const nav: [View, string, string, typeof Package][] = [
     ["sell", "Sell", "विक्री", ShoppingCart],
     ["products", "Products", "उत्पादने", Package],
@@ -337,6 +375,7 @@ export default function RetailWorkspace({
     currentCart = purchasing ? purchaseCart : cart,
     setCurrentCart = purchasing ? setPurchaseCart : setCart;
   const total = currentCart.reduce((n, l) => n + lineTotal(l), 0);
+  const availableStock = (product: Product) => Math.max(0, product.stock - (offline ? pending.filter(sale => !sale.rejection).reduce((qty, sale) => qty + ((sale.data.lines as CartLine[]) || []).filter(line => line.id === product.id).reduce((n,line) => n + line.qty, 0), 0) : 0));
   const add = (p: Product) =>
     setCurrentCart((prev) => {
       const existing = prev.find((l) => l.id === p.id);
@@ -363,16 +402,16 @@ export default function RetailWorkspace({
       prev.map((l) => (l.id === id ? { ...l, [key]: value } : l)),
     );
   const checkout = async () => {
+    const enteredPaid = paid === '' ? Math.round(total * 100) / 100 : Number(paid);
+    const amountPaid = method === 'credit' ? 0 : method === 'cash' ? Math.min(Math.round(total*100)/100,enteredPaid) : enteredPaid;
+    if (!currentCart.length || currentCart.some(line => !Number.isFinite(line.qty) || line.qty <= 0 || !Number.isFinite(line.price) || line.price < 0 || line.discount < 0 || line.discount > 100)) { setError('Check every quantity, price and discount before saving.'); return; }
+    if (!Number.isFinite(amountPaid) || amountPaid < 0 || amountPaid > Math.round(total*100)/100 || (amountPaid < Math.round(total*100)/100 && !contactId)) { setError('Choose a customer for credit and enter an amount between zero and the bill total.'); return; }
+    if (!purchasing && currentCart.some(line => { const p = data?.products.find(product => product.id === line.id); return !p || line.qty > availableStock(p) || (['pcs','pack'].includes(p.unit) && !Number.isInteger(line.qty)); })) { setError('Check available stock and quantities. Pending offline bills reserve stock on this device.'); return; }
     const result = await perform(purchasing ? "purchase" : "checkout", {
       lines: currentCart,
       contactId,
       method,
-      paid:
-        method === "credit"
-          ? 0
-          : paid === ""
-            ? Math.round(total * 100) / 100
-            : Number(paid),
+      paid: amountPaid,
       reference,
       interstate,
       supplyState,
@@ -387,12 +426,15 @@ export default function RetailWorkspace({
     }
   };
   const changeView = (v: View) => {
+    if ((v === 'purchases') !== purchasing) {
+      basketDetails.current[purchasing?'purchases':'sell']={contactId,method,paid,reference,interstate,supplyState};
+      const next=basketDetails.current[v==='purchases'?'purchases':'sell'] || emptyTender();
+      setContactId(next.contactId);setMethod(next.method);setPaid(next.paid);setReference(next.reference);setInterstate(next.interstate);setSupplyState(next.supplyState);
+    }
     setView(v);
     setQuery("");
     setCategory("");
     setLow(false);
-    setContactId("");
-    setPaid("");
     setSelectedContact("");
     setError("");
   };
@@ -569,7 +611,7 @@ export default function RetailWorkspace({
               Do not enter these sales again. They will be checked using their
               original request IDs.
             </p>
-            <button disabled={busy || offline} onClick={syncPending}>
+            <button disabled={busy || offline} onClick={() => void syncPending()}>
               Sync pending bills
             </button>
             {pending.filter(s => s.rejection).map(s => <div key={s.id}>
@@ -697,7 +739,7 @@ export default function RetailWorkspace({
                       onClick={() => add(p)}
                       disabled={
                         !purchasing &&
-                        (p.stock <= 0 ||
+                        (availableStock(p) <= 0 ||
                           (!!p.expiry_date && p.expiry_date < today()))
                       }
                     >
@@ -714,7 +756,7 @@ export default function RetailWorkspace({
                       <small
                         className={p.stock <= p.reorder_level ? "low" : ""}
                       >
-                        {p.stock} {p.unit} {t("available", "उपलब्ध")}
+                        {availableStock(p)} {p.unit} {t("available", "उपलब्ध")}
                         {p.expiry_date && p.expiry_date < today()
                           ? " · Expired"
                           : ""}
@@ -859,13 +901,13 @@ export default function RetailWorkspace({
                   {method !== "credit" && (
                     <label>
                       {t(
-                        "Amount paid (leave blank for full)",
+                        !purchasing && method === "cash" ? "Cash received (leave blank for exact)" : "Amount paid (leave blank for full)",
                         "दिलेली रक्कम (पूर्ण असल्यास रिक्त)",
                       )}
                       <VoiceInput
                         type="number"
                         min="0"
-                        max={total}
+                        max={method === 'cash' ? undefined : total}
                         step="0.01"
                         value={paid}
                         onChange={(e) => setPaid(e.target.value)}
@@ -873,6 +915,11 @@ export default function RetailWorkspace({
                       />
                     </label>
                   )}
+                  {!purchasing && method === 'cash' && <div className="retail-cash-chips">
+                    <small>{t('Cash received · change is returned to the customer', 'मिळालेली रोकड · ग्राहकाला सुट्टे परत द्या')}</small>
+                    <div>{[50,100,200,500].map(amount => <button type="button" key={amount} onClick={() => setPaid(String(amount))}>{cash(amount)}</button>)}</div>
+                    <strong>{t('Change to return', 'परत द्यायचे सुट्टे')}: {cash(Math.max(0, Number(paid || total) - total))}</strong>
+                  </div>}
                   {!purchasing && data.shop.settings.gstin && (
                     <>
                       <label className="retail-check">
@@ -1404,9 +1451,9 @@ export default function RetailWorkspace({
               </button>
             </div>
             <p className="retail-help">
-              Due bills are reviewed and generated here. Each run creates one
-              credit bill and advances the due date only after success. Skip a
-              delivery or pause the template anytime.
+              Generate bills manually or enable automatic billing per template.
+              Automatic billing checks every five minutes and creates one due credit bill per run,
+              including overdue dates. Skip a delivery or pause anytime. Stock failures are shown below.
             </p>
             <Table
               headers={[
@@ -1417,11 +1464,17 @@ export default function RetailWorkspace({
                 "Actions",
               ]}
               rows={data.recurring.map((r) => [
-                r.name,
+                <span key={r.id}>{r.name}{r.last_error && <small className="retail-error" role="status">{r.last_error}</small>}</span>,
                 data.contacts.find((c) => c.id === r.customer_id)?.name || "",
                 r.cadence,
                 r.next_date,
                 <div className="retail-row-actions" key={r.id}>
+                  <button disabled={busy || offline} onClick={async () => {
+                    if(lock.current)return;lock.current=true;setBusy(true);
+                    try { await rpcRef.current('retail_schedule',{p_shop_id:shopId,p_id:r.id,p_enabled:!r.automatic});await reload();setNotice(r.automatic?'Automatic billing disabled':'Automatic billing enabled; due credit bills will be generated every five minutes.'); }
+                    catch(e){setError(e instanceof Error?e.message:'Could not change schedule');}
+                    finally{lock.current=false;setBusy(false);}
+                  }}>{r.automatic?'Automatic: on':'Enable automatic billing'}</button>
                   <button
                     disabled={busy || !r.active || r.next_date > today()}
                     onClick={async () => {
@@ -1449,6 +1502,7 @@ export default function RetailWorkspace({
           </>
         )}
         {view === "settings" && (
+          <><Appearance lang={lang} />
           <form
             className="retail-settings"
             onSubmit={async (e) => {
@@ -1510,7 +1564,7 @@ export default function RetailWorkspace({
               printer in the operating system. Bluetooth/USB device support must
               be checked on your actual hardware.
             </p>
-          </form>
+          </form></>
         )}
       </div>
       {receipt && (

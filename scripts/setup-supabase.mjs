@@ -1,10 +1,9 @@
 import { readFile } from 'node:fs/promises';
-import pg from 'pg';
+import {databaseClient} from './database-client.mjs';
 import { loadEnvFile } from 'node:process';
 
 try { loadEnvFile('.env.local'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
 
-const { Client } = pg;
 
 const databaseUrl = process.env.DATABASE_URL;
 
@@ -16,10 +15,7 @@ if (!databaseUrl) {
 const sql = await readFile(new URL('../supabase/schema.sql', import.meta.url), 'utf8');
 const operations = await readFile(new URL('../supabase/inventory-operations.sql', import.meta.url), 'utf8');
 const retail = await readFile(new URL('../supabase/migrations/20260912_retail_pos.sql', import.meta.url), 'utf8');
-const client = new Client({
-  connectionString: databaseUrl,
-  ssl: { rejectUnauthorized: true },
-});
+const client = await databaseClient();
 
 try {
   await client.connect();
@@ -27,6 +23,9 @@ try {
   await client.query(sql);
   await client.query(operations);
   await client.query(retail);
+  await client.query(await readFile(new URL('../supabase/migrations/20260913_retail_scheduler.sql',import.meta.url),'utf8'));
+  await client.query(await readFile(new URL('../supabase/migrations/20260914_auth_limits.sql',import.meta.url),'utf8'));
+  await client.query(await readFile(new URL('../supabase/retail-cron.sql',import.meta.url),'utf8'));
   await client.query("notify pgrst, 'reload schema'");
   await client.query('commit');
   console.log('Supabase inventory migration applied. Existing records preserved.');
