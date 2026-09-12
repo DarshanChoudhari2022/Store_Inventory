@@ -27,9 +27,7 @@ export default function PurchaseScan({
     if (!files?.length) return;
     setBusy(true);
     setError("");
-    let worker:
-      | Awaited<ReturnType<(typeof import("tesseract.js"))["createWorker"]>>
-      | undefined;
+    let worker: Worker | undefined;
     try {
       if (files.length > 5) throw new Error("Choose up to five bill images.");
       for (const f of Array.from(files)) {
@@ -39,22 +37,17 @@ export default function PurchaseScan({
         )
           throw new Error("Use JPG, PNG or WebP images under 8 MB each.");
       }
-      const { createWorker } = await import("tesseract.js");
-      worker = await createWorker("eng", 1, {
-        logger: (m) =>
-          setProgress(`${m.status} ${Math.round((m.progress || 0) * 100)}%`),
+      worker = new Worker(new URL('./ocr-worker.ts', import.meta.url), {type:'module'});
+      const result = await new Promise<{text:string}>((resolve,reject)=>{
+        worker!.onmessage = event => { if(event.data.type==='progress') setProgress(event.data.value); else if(event.data.type==='complete') resolve(event.data); else reject(new Error(event.data.message || 'OCR failed')); };
+        worker!.onerror = () => reject(new Error('OCR worker could not start'));
+        worker!.postMessage({files:Array.from(files)});
       });
-      let content = "";
-      for (const file of Array.from(files)) {
-        const r = await worker.recognize(file);
-        content += r.data.text + "\n";
-      }
-      setText(content);
-      setRows([]);
+      setText(result.text); setRows([]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not scan this image");
     } finally {
-      await worker?.terminate();
+      worker?.terminate();
       setBusy(false);
     }
   }

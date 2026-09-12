@@ -8,7 +8,7 @@ test('individual operators are shop isolated, revocable and confirm with their o
  const db=new PGlite({extensions:{pgcrypto}});
  try{
   await db.exec('create role anon;create role authenticated;create schema extensions;');
-  for(const file of ['schema.sql','inventory-operations.sql','migrations/20260912_retail_pos.sql','migrations/20260914_auth_limits.sql','migrations/20260915_product_control.sql','migrations/20260916_shop_staff.sql','migrations/20260917_staff_roles.sql'])await db.exec(await readFile(new URL('../supabase/'+file,import.meta.url),'utf8'));
+  for(const file of ['schema.sql','inventory-operations.sql','migrations/20260912_retail_pos.sql','migrations/20260914_auth_limits.sql','migrations/20260915_product_control.sql','migrations/20260916_shop_staff.sql','migrations/20260917_staff_roles.sql','migrations/20260918_migration_ledger.sql','migrations/20260919_scale_controls.sql'])await db.exec(await readFile(new URL('../supabase/'+file,import.meta.url),'utf8'));
   const call=async(name,args)=>(await db.query(`select ${name}(${args.map((_,i)=>'$'+(i+1)).join(',')}) r`,args)).rows[0].r;
   await db.query("insert into owner_accounts(username,password_hash) values('owner',crypt('owner-test-password',gen_salt('bf')))");
   const owner=await call('login_user',['owner','owner-test-password']);

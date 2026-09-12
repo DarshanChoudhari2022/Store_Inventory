@@ -515,11 +515,9 @@ export default function Home() {
 
     try {
       setIsBusy(true);
-      const { data, error } = await getSupabaseClient().rpc('login_user', {
-        p_username: username,
-        p_password: password,
-      });
-      const login = getRpcData<Record<string, unknown>>(data, error);
+      const response = await fetch('/api/session', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({username,password})});
+      const login = await response.json() as Record<string, unknown>;
+      if (!response.ok) throw new Error(String(login.error || 'Invalid username or password'));
       if (!login.token || login.error) throw new Error(String(login.error || 'Invalid username or password'));
       const nextSession: Session = {
         token: String(login.token),
@@ -559,6 +557,7 @@ export default function Home() {
     setDashboard(null);
     setCredentialNote(null);
     window.localStorage.removeItem(sessionKey);
+    await fetch('/api/session', {method:'DELETE'}).catch(() => {});
     if (token) {
       try { await getSupabaseClient().rpc('logout_user', { p_token: token }); }
       catch { /* Local sign-out still completes if the network is unavailable. */ }

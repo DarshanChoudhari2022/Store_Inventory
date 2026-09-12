@@ -29,8 +29,9 @@ try {
   await client.query(await readFile(new URL('../supabase/migrations/20260916_shop_staff.sql',import.meta.url),'utf8'));
   await client.query(await readFile(new URL('../supabase/migrations/20260917_staff_roles.sql',import.meta.url),'utf8'));
   await client.query(await readFile(new URL('../supabase/migrations/20260918_migration_ledger.sql',import.meta.url),'utf8'));
+  await client.query(await readFile(new URL('../supabase/migrations/20260919_scale_controls.sql',import.meta.url),'utf8'));
   await client.query(await readFile(new URL('../supabase/retail-cron.sql',import.meta.url),'utf8'));
-  for (const name of ['schema.sql','inventory-operations.sql','migrations/20260912_retail_pos.sql','migrations/20260913_retail_scheduler.sql','migrations/20260914_auth_limits.sql','migrations/20260915_product_control.sql','migrations/20260916_shop_staff.sql','migrations/20260917_staff_roles.sql','migrations/20260918_migration_ledger.sql','retail-cron.sql']) await client.query('insert into schema_migrations(name) values($1) on conflict(name) do nothing',[name]);
+  for (const name of ['schema.sql','inventory-operations.sql','migrations/20260912_retail_pos.sql','migrations/20260913_retail_scheduler.sql','migrations/20260914_auth_limits.sql','migrations/20260915_product_control.sql','migrations/20260916_shop_staff.sql','migrations/20260917_staff_roles.sql','migrations/20260918_migration_ledger.sql','migrations/20260919_scale_controls.sql','retail-cron.sql']) await client.query('insert into schema_migrations(name) values($1) on conflict(name) do nothing',[name]);
   await client.query("notify pgrst, 'reload schema'");
   await client.query('commit');
   console.log('Supabase inventory migration applied. Existing records preserved.');

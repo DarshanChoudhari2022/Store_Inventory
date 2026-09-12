@@ -28,6 +28,7 @@ import {
   Menu,
   X,
 } from "lucide-react";
+import dynamic from 'next/dynamic';
 import {
   cash,
   productName,
@@ -44,7 +45,7 @@ import {
 import Receipt from "./Receipt";
 import ScanBarcode from "./ScanBarcode";
 import BarcodeLabel from "./BarcodeLabel";
-import PurchaseScan from "./PurchaseScan";
+const PurchaseScan = dynamic(() => import('./PurchaseScan'), {ssr:false});
 import VoiceInput from "./VoiceInput";
 import Appearance from './Appearance';
 import DeleteProductDialog from './DeleteProductDialog';
@@ -122,6 +123,7 @@ export default function RetailWorkspace({
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [selectedContact, setSelectedContact] = useState(""),
+    [pages, setPages] = useState<Record<string, number>>({}),
     [navOpen, setNavOpen] = useState(false);
   const lock = useRef(false),
     request = useRef<{ key: string; id: string } | null>(null),
@@ -387,6 +389,9 @@ export default function RetailWorkspace({
     currentCart = purchasing ? purchaseCart : cart,
     setCurrentCart = purchasing ? setPurchaseCart : setCart;
   const total = currentCart.reduce((n, l) => n + lineTotal(l), 0);
+  const pageSize = 50;
+  const pageOf = <T,>(key: string, rows: T[]) => rows.slice((pages[key] || 0) * pageSize, ((pages[key] || 0) + 1) * pageSize);
+  const pager = (key: string, totalRows: number) => <Pagination page={pages[key] || 0} pages={Math.max(1, Math.ceil(totalRows / pageSize))} onChange={(next) => setPages(current => ({...current, [key]: next}))} />;
   const availableStock = (product: Product) => Math.max(0, product.stock - (offline ? pending.filter(sale => !sale.rejection).reduce((qty, sale) => qty + ((sale.data.lines as CartLine[]) || []).filter(line => line.id === product.id).reduce((n,line) => n + line.qty, 0), 0) : 0));
   const add = (p: Product) =>
     setCurrentCart((prev) => {
@@ -1094,7 +1099,7 @@ export default function RetailWorkspace({
                 "Expiry",
                 "Action",
               ]}
-              rows={rows.map((p) => [
+              rows={pageOf("products", rows).map((p) => [
                 `${productName(p)}${p.is_active===false?' · Inactive':''}`,
                 cash(p.default_selling_price),
                 cash(p.buying_price),
@@ -1118,6 +1123,7 @@ export default function RetailWorkspace({
                 </div>,
               ])}
             />
+            {pager("products", rows.length)}
             <p className="retail-help">
               {t(
                 "Use Purchases to receive new stock. Edit / count sets the total quantity physically on the shelf.",
@@ -1128,13 +1134,14 @@ export default function RetailWorkspace({
               <h3>{t("Today’s stock movements", "आजच्या साठ्याच्या नोंदी")}</h3>
               <Table
                 headers={["Product", "Change", "Reason", "Date"]}
-                rows={data.movements.map((m) => [
+                rows={pageOf("movements", data.movements).map((m) => [
                   m.item_name,
                   m.quantity,
                   m.reason,
                   date(m.created_at),
                 ])}
               />
+              {pager("movements", data.movements.length)}
             </section>
           </>
         )}
@@ -1142,7 +1149,7 @@ export default function RetailWorkspace({
           <>
             <Table
               headers={["Bill", "Customer", "Total", "Paid", "Date", "Action"]}
-              rows={data.invoices.map((i) => [
+              rows={pageOf("invoices", data.invoices).map((i) => [
                 i.number,
                 i.customer.name || "Walk-in",
                 cash(i.total),
@@ -1162,6 +1169,7 @@ export default function RetailWorkspace({
                 </div>,
               ])}
             />
+            {pager("invoices", data.invoices.length)}
             {data.returns.length > 0 && (
               <section className="retail-panel">
                 <h3>Returns in selected period</h3>
@@ -1202,7 +1210,7 @@ export default function RetailWorkspace({
             </div>
             <Table
               headers={["Name", "Phone", "Outstanding", "Actions"]}
-              rows={data.contacts
+              rows={pageOf("contacts", data.contacts
                 .filter(
                   (c) =>
                     c.kind ===
@@ -1211,7 +1219,7 @@ export default function RetailWorkspace({
                       .toLowerCase()
                       .includes(query.toLowerCase()),
                 )
-                .map((c) => [
+                ) .map((c) => [
                   c.name,
                   c.phone || "—",
                   cash(c.balance),
@@ -1230,6 +1238,7 @@ export default function RetailWorkspace({
                   </div>,
                 ])}
             />
+            {pager("contacts", data.contacts.filter(c => c.kind === (view === "customers" ? "customer" : "supplier") && `${c.name} ${c.phone}`.toLowerCase().includes(query.toLowerCase())).length)}
             {selectedContact && (
               <section className="retail-panel">
                 <h3>
@@ -1704,6 +1713,7 @@ export default function RetailWorkspace({
                 value={dialog.product?.category || "General"}
                 required
               />
+              {pager("movements", data.movements.length)}
               <p className="retail-help">For clothing, add each size and colour as a separate product with its own barcode and stock. For example: Oxford shirt · SH-01 · M · Navy.</p>
               <label className="retail-check"><input name="active" type="checkbox" defaultChecked={dialog.product?.is_active!==false}/>Available for sale</label>
               <p className="retail-help">Turn off to hide this product from billing without changing stock or previous receipts.</p>
@@ -1980,6 +1990,10 @@ function Table({ headers, rows }: { headers: string[]; rows: ReactNode[][] }) {
   ) : (
     <Empty>No records yet.</Empty>
   );
+}
+function Pagination({page,pages,onChange}:{page:number;pages:number;onChange:(page:number)=>void}) {
+  if (pages <= 1) return null;
+  return <nav className="retail-pagination" aria-label="Table pages"><button type="button" disabled={page===0} onClick={()=>onChange(page-1)}>Previous</button><span>Page {page+1} of {pages}</span><button type="button" disabled={page+1>=pages} onClick={()=>onChange(page+1)}>Next</button></nav>;
 }
 function Field({
   name,

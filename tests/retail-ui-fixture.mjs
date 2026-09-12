@@ -5,7 +5,7 @@ import {PGlite} from '@electric-sql/pglite';
 import {pgcrypto} from '@electric-sql/pglite/contrib/pgcrypto';
 const db=new PGlite({extensions:{pgcrypto}});
 await db.exec('create role anon;create role authenticated;create schema extensions;');
-for(const path of ['schema.sql','inventory-operations.sql','migrations/20260912_retail_pos.sql','migrations/20260913_retail_scheduler.sql','migrations/20260914_auth_limits.sql','migrations/20260915_product_control.sql','migrations/20260916_shop_staff.sql','migrations/20260917_staff_roles.sql'])await db.exec(await readFile(new URL('../supabase/'+path,import.meta.url),'utf8'));
+for(const path of ['schema.sql','inventory-operations.sql','migrations/20260912_retail_pos.sql','migrations/20260913_retail_scheduler.sql','migrations/20260914_auth_limits.sql','migrations/20260915_product_control.sql','migrations/20260916_shop_staff.sql','migrations/20260917_staff_roles.sql','migrations/20260918_migration_ledger.sql','migrations/20260919_scale_controls.sql'])await db.exec(await readFile(new URL('../supabase/'+path,import.meta.url),'utf8'));
 await db.query("insert into owner_accounts(username,password_hash) values('test-owner',crypt('local-test-password',gen_salt('bf')))");
 const call=async(name,args)=>(await db.query(`select ${name}(${Object.keys(args).map((key,i)=>key+'=> $'+(i+1)).join(',')}) result`,Object.values(args).map(v=>v&&typeof v==='object'?JSON.stringify(v):v))).rows[0].result;
 const owner=await call('login_user',{p_username:'test-owner',p_password:'local-test-password'});
