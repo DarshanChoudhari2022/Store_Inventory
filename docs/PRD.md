@@ -1,142 +1,83 @@
-# Product Requirements Document: Store Inventory Management
+# StoreStock product requirements
 
-## 1. Product Summary
+Version 2 · September 2026 · Retail-first scope
 
-Store Inventory Management is a lightweight admin dashboard for a Pune small-store owner who manages one or more stores. The owner can create store accounts, generate usernames and passwords for each shop/store, maintain store-wise item lists, record sold products at the actual sale price, update closing stock at the end of each day, and view sales, profit, and stock analysis.
+## Product definition
 
-## 2. Problem
+StoreStock is a mobile-friendly retail POS and multi-shop control plane for Indian kirana, grocery, tapri, pharmacy, hardware, clothing, and small retail teams. A super admin creates independent shops, gives each shop its own login, and sees owner-level performance without mixing inventory or transactions.
 
-Small shop owners often track stock mentally or in a notebook. This creates four recurring problems:
+Restaurant tables, waiters, kitchen tickets, delivery, and restaurant printing are outside the current retail release.
 
-- The owner does not know exact closing stock without manual recounting.
-- Daily profit is unclear when items are sold at different prices.
-- Fast moving items are discovered late, usually after stock runs out.
-- Custom/local items change often, so fixed POS software feels heavy.
+## Users and permissions
 
-## 3. Goals
+| User | Needs | Access |
+|---|---|---|
+| Super admin / owner | Create, pause, reactivate, reset, switch shops and compare performance | All shops and owner summaries |
+| Shop operator | Sell, receive stock, manage contacts, close cash, review reports | Assigned shop only |
+| Cashier (planned) | Make sales and print/share receipts | Assigned shop sales only |
 
-- Let the admin add any item sold at the shop.
-- Let the owner admin add multiple shops.
-- Generate username and password credentials for each shop.
-- Keep each shop's inventory, sales, and reports separate.
-- Track total quantity available for each item.
-- Record sales with quantity and actual sold price.
-- Calculate revenue, profit, units sold, stock value, and highest selling product.
-- Support daily closing stock updates.
-- Highlight low-stock items before they run out.
-- Keep the interface fast enough for counter use.
+## Functional requirements
 
-## 4. Non-Goals For V1
+### Shop administration
 
-- GST billing, tax filing, or invoice printing.
-- Supplier payment management.
-- Enterprise multi-branch accounting.
-- Customer loyalty or credit ledger.
-- Real payment integration.
+- Owner authentication is rate-limited and server-session based.
+- Owner creates multiple empty shops, pauses/reactivates them, resets credentials, and switches between them.
+- Shop data, cached data, inventory, sales, and reports are isolated by shop.
 
-## 5. Primary User
+### Catalogue and inventory
 
-The first user is a store owner/admin in Pune who may operate multiple counters. He needs to add shops, give each shop a simple login, and still see combined owner-level performance. Shop staff need a focused shop dashboard for daily sales and closing stock.
+- Products support name, category, barcode, HSN, tax rate, buying/selling price, unit, expiry, reorder level, and decimal stock.
+- Search, filters, camera barcode scan, CSV import, edit, delete, physical count, stale-count checks, and movement audit are available.
+- Checkout and receiving stock are atomic and cannot oversell.
+- Planned: batch/lot quantities with separate expiry dates.
 
-## 6. Core Workflows
+### Billing and payments
 
-### Owner Admin Login
+- Multi-item cart supports discounts, weighted quantities, tax-inclusive prices, cash, UPI, card, and credit.
+- Cash received can exceed the bill and shows change; stored payment is capped at the invoice total.
+- Credit requires a customer and supports partial settlement and outstanding balance.
+- Immutable invoice snapshots preserve historical product, price, tax, customer, shop, and tender data.
+- Request IDs make retries idempotent.
+- Receipts support 58/80 mm browser print/PDF, UPI QR, and user-initiated WhatsApp sharing.
 
-- Owner opens the app.
-- Enters owner username and password.
-- Lands on owner admin dashboard.
+### Customers, suppliers, and cash
 
-V1 prototype uses local login only. Production should use mobile OTP or password authentication.
+- Customer credit and settlement ledgers show outstanding balance.
+- Supplier purchases increase stock and record paid/due state.
+- Expenses, cash opening, tender totals, returns, and cash closing reconcile for a selected date.
+- Returns link to original invoices and preserve history.
 
-### Add Shop And Generate Credentials
+### Offline and recurring workflows
 
-- Owner enters shop name and area.
-- App creates a shop record.
-- App generates a username and password for that shop.
-- Owner can share the credentials with the shop user.
-- Owner can reset a shop password later.
+- A versioned service-worker shell and last successful shop workspace remain available offline for up to 12 hours.
+- Cart, payment details, purchase details, and sale requests persist in IndexedDB.
+- Network failures use cached data; authorization and validation errors do not.
+- Reconnection retries pending sales and removes only confirmed requests.
+- Recurring templates support daily/weekly/monthly schedules with explicit automatic opt-in; the server scheduler is idempotent and retains failures.
+- Planned: skip dates and route-wise delivery lists.
 
-### Shop Login
+### Appearance and input
 
-- Shop user enters generated username and password.
-- Shop user lands on only that shop's dashboard.
-- Shop inventory, sales, profit, and closing stock are scoped to that shop.
+- Responsive mobile layouts, light/dark themes, four accents, normal/large/extra-large text, cash chips, and optional print dialog are supported.
+- Voice entry is available beside editable text, number, date, search, and review fields. Password, file, checkbox, and select controls stay native.
+- English and Marathi cover the core counter workflow; complete translation is planned.
 
-### Add Item
+## Non-functional requirements
 
-- Admin enters item name, category, buying price, selling price, total quantity, and restock alert level.
-- Item appears in the shop inventory list.
+- Supabase is authoritative for authentication, authorization, money, stock, and invoice identity.
+- Browser roles cannot query tables directly; writes use scoped RPCs.
+- Migrations use verified TLS and are repeatable without demo data.
+- CI must pass lint, tests, production build, typecheck, and high-severity audit.
+- No database URLs, credentials, or private keys enter the browser bundle or repository.
+- Production acceptance includes phones, microphone/camera permissions, printer dimensions, and offline reload.
 
-### Record Sale
+## Success metrics
 
-- Admin selects an item.
-- Enters quantity sold.
-- Enters actual sold price per piece.
-- App reduces stock and records profit for that sale.
+- Product lookup to saved sale under 10 seconds for a trained operator.
+- New product entry under 30 seconds; 50-item count under 5 minutes.
+- Zero duplicate invoices on retry and zero cross-shop reads/writes in authorization tests.
+- Pending offline requests remain visible, recoverable, and reconcile after connectivity returns.
 
-### Closing Stock
+## Release gaps
 
-- At end of day, admin updates the count for each item after physical checking.
-- App saves the corrected stock count.
-
-### Dashboard Review
-
-- Admin sees today's revenue, profit, units sold, stock value, highest selling item, low stock alerts, and daily sales log.
-- Owner sees total shops, combined revenue, combined profit, total stock value, and low-stock count across shops.
-
-## 7. Useful Feature Brainstorm
-
-- Marathi/Hindi labels for non-English users.
-- Quick sale buttons for top items like Vimal, Gold Flake, Classic, lighter.
-- Voice entry: "Vimal 5 sold" for faster counter use.
-- Daily closing reminder around shop closing time.
-- Supplier restock list generated from low-stock items.
-- WhatsApp share of restock list to supplier.
-- Credit/udhaar ledger for known customers.
-- Expense tracking for rent, helper salary, ice, cups, snacks, delivery.
-- Barcode scan for packaged products.
-- Offline-first mode with cloud sync later.
-- Owner PIN for profit numbers, while helper can only enter sales.
-- Shop user permissions, so staff can update sales/stock but cannot see other shops.
-- Credential expiry and forced password reset after first login.
-- Shop-wise comparison: which store has better sales and margins.
-- Price change history to understand margin changes.
-- Spoilage/damage entry for broken packs or unusable stock.
-- Daily cash tally: opening cash, sales cash, expenses, closing cash.
-- Simple export to Excel.
-
-## 8. Success Metrics
-
-- Admin can add a new item in under 30 seconds.
-- Admin can record a sale in under 10 seconds.
-- Closing stock update can be completed in under 5 minutes for 50 items.
-- Low-stock alert reduces stockouts for top 10 items.
-- Daily profit estimate is visible without manual calculation.
-
-## 9. MVP Scope
-
-Included in current prototype:
-
-- Admin login screen.
-- Owner admin login.
-- Multiple shop creation.
-- Generated shop username and password.
-- Shop password reset.
-- Shop-scoped login and dashboard.
-- Supabase-backed cloud data storage.
-- Inventory list seeded with common store items.
-- Add custom item form.
-- Record sale form with actual sold price.
-- Automatic stock decrement.
-- Closing count updates.
-- Today's revenue, profit, units sold, stock value, top seller.
-- Low-stock analysis.
-- Database persistence through Supabase.
-
-Production next step:
-
-- First-login password reset.
-- Supabase Auth or OTP-based authentication.
-- Password hashing and role permissions.
-- Daily reports by date range.
-- Data export and backup.
+Next increments are staff roles, native thermal/label printing, AI purchase import, double-entry accounting/GST filing exports, batch expiry, logo/sounds, complete Marathi translation, and skip/route recurring workflows. Do not advertise these as complete until accepted.

@@ -1,173 +1,65 @@
-# Implementation Document
+# StoreStock implementation plan
 
-## Current Implementation
+Version 2 · September 2026
 
-The app is a Vinext/React app created with the OpenAI Sites scaffold. It now uses Supabase Postgres as the system of record and supports an owner admin account plus generated shop accounts.
+## Architecture
 
-Key files:
+- Next.js/Vinext React client with Supabase Postgres as the system of record.
+- app/page.tsx owns sessions, owner/shop loading, and scoped RPC adapters.
+- app/retail/RetailWorkspace.tsx owns counter workflows and tabs.
+- app/retail/domain.ts contains money, quantity, reporting, CSV, invoice, and workspace types.
+- app/retail/offline.ts contains versioned IndexedDB cache, drafts, and idempotent pending sales.
+- public/retail-sw.js caches the shell and static assets; API responses are never cached.
+- app/retail/Appearance.tsx applies device theme, accent, text size, and print preferences.
+- app/landing/* contains the public product experience and motion primitives.
 
-- `app/page.tsx`: client-side inventory manager UI and state logic.
-- `app/layout.tsx`: app metadata.
-- `app/globals.css`: global styling.
-- `supabase/schema.sql`: Supabase tables, seed data, RLS lockdown, and RPC functions.
-- `scripts/setup-supabase.mjs`: one-time schema setup runner using `DATABASE_URL`.
-- `docs/PRD.md`: product requirements.
-- `docs/DESIGN.md`: design direction.
+## Server invariants
 
-## Data Model
+1. retail_action takes a shop advisory lock, validates the payload, and commits stock plus ledger changes atomically.
+2. (shop_id, request_id) makes checkout and scheduled billing idempotent.
+3. Invoice snapshots preserve historical prices, tax, customer, and shop details.
+4. can_access_shop permits only the owner or assigned active shop session.
+5. Login failures are throttled; paused shops cannot receive new sessions.
+6. Migration clients verify Supabase's published CA.
 
-### Item
+## Implemented workflow map
 
-```ts
-type Item = {
-  id: string;
-  name: string;
-  category: string;
-  buyingPrice: number;
-  defaultSellingPrice: number;
-  stock: number;
-  reorderLevel: number;
-};
-```
+| Area | Implementation | Verification |
+|---|---|---|
+| Multi-shop | Owner RPCs, isolation, pause/reset/switch | Live rollback smoke test and SQL tests |
+| Billing | Atomic cart checkout, tax snapshots, tender and credit | Retry, stock, balance, return tests |
+| Inventory | Product lifecycle, decimal units, barcode, count audit | Validation and stale-count tests |
+| Purchases | Supplier contacts, receiving, dues, settlement | Purchase stock and balance tests |
+| Cash/reports | Register, expenses, date reports, CSV | Reconciliation and report tests |
+| Offline | Service worker, IndexedDB outbox, recovery and auto sync | Outbox tests and browser outage check |
+| Recurring | Opt-in scheduler, idempotent invoices, retained errors | Scheduler tests and live cron registration |
+| Input | Voice fields, camera barcode, OCR review | Voice/UI tests; device acceptance pending |
+| Appearance | Responsive CSS, dark/light, accents, text sizes | Desktop/mobile browser inspection |
 
-### Sale
+## Delivery phases
 
-```ts
-type Sale = {
-  id: string;
-  itemId: string;
-  itemName: string;
-  qty: number;
-  buyingPrice: number;
-  soldPrice: number;
-  date: string;
-};
-```
+### Phase 1 — production retail core (complete)
 
-### Shop
+Ship retail workflows, migrations, security controls, offline queue, scheduler, responsive shell, appearance preferences, CI checks, and truthful landing content. New automatic behavior remains opt-in.
 
-```ts
-type Shop = {
-  id: string;
-  name: string;
-  area: string;
-  username: string;
-  items: Item[];
-  sales: Sale[];
-};
-```
+### Phase 2 — team and hardware (next)
 
-### Session
+Add shop-scoped staff accounts, owner/cashier permissions, first-login reset, logo upload, and a printer adapter selected against confirmed Android, iPhone, Windows, and printer models. Keep browser printing as fallback.
 
-```ts
-type Session = {
-  token: string;
-  role: 'owner' | 'shop';
-  shopId?: string;
-};
-```
+### Phase 3 — finance and import
 
-## Storage
+Add double-entry accounts, journal entries, balance sheet, trial balance, cash flow, GSTR exports, and a reviewed purchase-import provider. Require fixture-based examples and accountant review.
 
-The application stores shop, item, sale, and account data in Supabase Postgres.
+### Phase 4 — inventory depth and recurring delivery
 
-The browser stores only the current app session token in local storage. Shop passwords are hashed in Postgres with `pgcrypto`; generated passwords are shown only at creation or reset time.
+Add batch/lot quantities, expiry alerts, skip dates, route lists, and customer reminders without rewriting movement or invoice history.
 
-## Supabase Schema
+### Phase 5 — optional restaurant module
 
-Tables:
+Only if scope changes: tables, floor plan, KOT, kitchen status, waiters, takeaway, delivery, and kitchen printers should be a separate module with separate acceptance criteria.
 
-- `owner_accounts`
-- `shops`
-- `items`
-- `sales`
-- `app_sessions`
+## Quality gates
 
-Direct table access is revoked from `anon` and `authenticated`; the browser uses granted RPC functions instead.
+Before each release run: npm ci, npm run lint, npm test, npm run build, npm run typecheck, npm audit --audit-level=high, and npm run verify:live.
 
-RPC functions:
-
-- `login_user`
-- `logout_user`
-- `list_shops`
-- `owner_summary`
-- `get_shop_dashboard`
-- `create_shop`
-- `reset_shop_password`
-- `add_item`
-- `update_stock`
-- `record_sale`
-
-## Dashboard Calculations
-
-- Revenue: sum of `soldPrice * qty` for today's sales.
-- Profit: sum of `(soldPrice - buyingPrice) * qty` for today's sales.
-- Units sold: sum of `qty` for today's sales.
-- Stock value: sum of `stock * buyingPrice` for all items.
-- Highest seller: item with the highest units sold today.
-- Low stock: items where `stock <= reorderLevel`.
-
-Owner-level calculations aggregate today's sales and inventory value across all shops.
-
-## Authentication Behavior
-
-Seed credentials:
-
-- Owner: `owner` / `owner123`
-- Seed shop: `fcroad.admin` / `Store@4217`
-
-When the owner creates a new shop, the app generates:
-
-- Username: normalized shop slug plus `.admin`
-- Password: `Store@` plus a random four-digit number
-
-The plaintext password is passed once to Supabase, hashed there, and shown to the owner immediately. Existing passwords are not readable.
-
-## Production Architecture Recommendation
-
-For the next production hardening pass:
-
-- Move from custom app sessions to Supabase Auth or OTP login.
-- Add first-login password reset.
-- Add roles for owner, shop admin, and helper.
-- Add audit tables:
-  - `stock_adjustments`
-  - `suppliers`
-  - `expenses`
-- Reports:
-  - daily summary
-  - weekly item movement
-  - margin report
-  - low-stock reorder list
-
-## Security Notes
-
-- Direct table access is closed with RLS and revoked grants.
-- Browser calls are routed through security-definer RPC functions.
-- Passwords are hashed in the database.
-- Generated shop passwords should be temporary and reset on first login.
-- Profit dashboard should require owner role.
-- Helper role should be limited to sale entry and stock count.
-
-## Testing Plan
-
-Manual MVP checks:
-
-- Login opens dashboard.
-- Supabase owner login returns a session token.
-- Owner can create a new shop.
-- New shop receives generated username and password.
-- Generated shop credentials can be used to log in.
-- Shop login sees only that shop's inventory.
-- Add item persists in Supabase.
-- Record sale reduces stock.
-- Sale at custom price changes profit correctly.
-- Closing count edits stock.
-- Low-stock alert appears at or below reorder level.
-- Highest seller updates after sales.
-
-Automated tests to add later:
-
-- Unit tests for dashboard calculations.
-- Component tests for add item and record sale forms.
-- End-to-end test for full daily workflow.
+Then test the deployed URL with two shops, mobile widths, offline reload/reconnect, voice permission, camera scanning, receipt dimensions, and target printer hardware. Never mark a vendor-advertised capability complete from a marketing page alone.

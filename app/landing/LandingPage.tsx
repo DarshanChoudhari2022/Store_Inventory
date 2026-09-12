@@ -19,6 +19,8 @@ import {
   Download,
   Languages,
   SlidersHorizontal,
+  WifiOff,
+  WalletCards,
 } from "lucide-react";
 import { AnimatedButton, AnimatedLink, Reveal } from "./Motion";
 import "./landing.css";
@@ -102,6 +104,24 @@ export default function LandingPage({
         "मालक आणि दुकानांसाठी स्वतंत्र प्रवेश. लॉगिन तयार करा, पासवर्ड रीसेट करा आणि इंग्रजी किंवा मराठीत काम करा.",
       ),
       tag: t("Access & languages", "प्रवेश आणि भाषा"),
+    },
+    {
+      icon: WifiOff,
+      title: t("Keep selling when the signal drops.", "नेट गेले तरी विक्री सुरू."),
+      copy: t(
+        "Your workspace and pending bills stay on the device. When the connection returns, each sale syncs safely without duplicates.",
+        "वर्कस्पेस आणि प्रलंबित बिले डिव्हाइसवर राहतात. कनेक्शन परतल्यावर प्रत्येक विक्री सुरक्षितपणे समक्रमित होते.",
+      ),
+      tag: t("Offline recovery", "ऑफलाइन पुनर्प्राप्ती"),
+    },
+    {
+      icon: WalletCards,
+      title: t("Keep credit and purchases together.", "उधारी आणि खरेदी एकत्र."),
+      copy: t(
+        "Track customer balances, supplier dues, expenses, returns, and cash closing in the same daily workspace.",
+        "ग्राहक शिल्लक, पुरवठादार देणी, खर्च, परतावा आणि रोकड बंद करणे एकाच जागी पाहा.",
+      ),
+      tag: t("Daily accounts", "दैनंदिन हिशोब"),
     },
   ];
   return (
@@ -686,18 +706,10 @@ export default function LandingPage({
           </small>
         </span>
         <span>
-          {t("Interactions with", "इंटरॅक्शन्स")}{" "}
-          <a href="https://skiper-ui.com/" target="_blank" rel="noreferrer">
-            Skiper UI
-          </a>{" "}
-          &{" "}
-          <a
-            href="https://www.vengenceui.com/"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Vengeance UI
-          </a>
+          {t(
+            "Retail operations, made clear.",
+            "किरकोळ व्यवसायासाठी स्पष्ट आणि सोपे काम.",
+          )}
         </span>
         <AnimatedLink href="#">{t("Back to top", "वर जा")} ↑</AnimatedLink>
       </footer>

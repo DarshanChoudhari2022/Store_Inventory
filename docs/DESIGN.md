@@ -1,88 +1,41 @@
-# Design Document
+# StoreStock design specification
 
-## Product Shape
+Version 2 · September 2026
 
-This is an operational dashboard, not a landing page. The first screen after owner login focuses on shop management and combined business health. The shop dashboard focuses on the numbers a shop admin needs while working: today's sales, profit, units sold, stock value, highest seller, inventory, sale entry, and low-stock analysis.
+## Design thesis
 
-## Information Architecture
+StoreStock is a calm, high-contrast counter workspace: confident typography, compact information density, green action emphasis, and motion used to confirm state. The public landing page shares the same trust but has more editorial breathing room. The product UI puts the operator's next action first.
 
-- Login
-  - Owner or shop identity fields.
-  - Prototype note for local-only authentication.
-- Owner Admin
-  - Combined KPIs.
-  - Shop account table.
-  - Add shop form.
-  - Generated username and password visibility.
-  - Selected shop management.
-- Dashboard
-  - KPI strip.
-  - Inventory table.
-  - Record sale panel.
-  - Add custom item panel.
-  - Low-stock analysis.
-  - Today's sales log.
+## Visual system
 
-## Visual Direction
+- Geist Sans with Inter/Arial fallback; body and controls start at 16px or larger.
+- Light: cool near-white shell, white panels, charcoal text, deep green primary action.
+- Dark: blue-black shell, slate panels, pale text, accessible borders.
+- Accents: green, blue, orange, purple. Accent changes action/focus colors, not warning/error meaning.
+- 12–16px panel corners, 1px borders, restrained shadows, minimum 44px touch targets.
+- Status uses text plus color. Motion is short and respects prefers-reduced-motion.
 
-The interface uses a practical small-business palette:
+## Information architecture
 
-- Warm off-white background for long daily use.
-- White panels for data surfaces.
-- Deep green for primary actions and positive status.
-- Muted orange for restock warnings.
-- Dark neutral text for readability.
+Public landing: navigation → value proposition → feature proof → workspace preview → daily workflow → secure access → footer.
 
-The design avoids oversized marketing sections after login. Data density is moderate so it works for both a small laptop and a mobile device.
+Owner: header → shop controls → shop switcher → owner summary → shop workspace.
 
-## Interaction Design
+Shop: header → horizontal mobile navigation → Sell, Products, Bills, Customers, Suppliers, Purchases, Cash & expenses, Reports, Recurring bills, Shop settings.
 
-### Record Sale
+## Responsive rules
 
-The sale form keeps the most common workflow compact:
+- The shell never creates horizontal overflow.
+- Dense tables scroll inside their own container; text is not shrunk below readable sizes.
+- Navigation becomes a sticky horizontal strip below 850px.
+- Checkout, forms, KPIs, and settings stack below 620px; product cards remain two columns for quick counter tapping.
+- Test 320px, 375px, 430px, 768px, 1024px, and desktop widths.
+- Respect 200% browser text enlargement; content may grow vertically.
 
-1. Select product.
-2. Enter quantity.
-3. Enter sold price per piece.
-4. Save sale.
+## Accessibility and states
 
-The sold price is editable because store pricing can vary by customer, loose item, pack, or time.
+Every input has a visible label and accessible name. Focus rings remain visible in both themes. Busy, offline, queued, rejected, and saved states use text with role=status. Destructive actions are confirmable or recoverable. Voice controls expose privacy help and stop on unmount. Receipts distinguish final invoices from pending offline requests.
 
-### Shop Account Creation
+## Public landing rules
 
-The owner admin can create a shop with just shop name and area. The system generates a practical username from the shop name and a password with a clear `Store@0000` pattern for demo use. Production should generate stronger one-time passwords and force reset on first login.
-
-### Shop Switching
-
-The owner can view and manage any shop from a selector. Shop users do not see the selector and only land in their assigned shop dashboard.
-
-### Closing Stock
-
-Each inventory row has an editable closing count. The owner can physically count items at night and correct the stock directly without opening another page.
-
-### Low Stock
-
-Items at or below their reorder level are flagged in the table and repeated in a focused low-stock list.
-
-## Responsive Behavior
-
-- KPI cards wrap across screen sizes.
-- Inventory table scrolls horizontally on smaller screens to preserve readable columns.
-- Forms stack naturally on narrow viewports.
-- Buttons and inputs use stable sizing for touch-friendly operation.
-
-## Accessibility Notes
-
-- Form fields use labels.
-- Closing count inputs include item-specific aria labels.
-- Status text is visible, not color-only.
-- Color contrast is chosen for practical readability.
-
-## Future Design Extensions
-
-- Add a compact "counter mode" with large quick-sale buttons.
-- Add Marathi/Hindi language toggle.
-- Add a closing-day checklist.
-- Add role-specific views for owner and helper.
-- Add credential copy buttons and first-login password reset.
-- Add printable or WhatsApp-friendly reports.
+Describe only implemented workflows and label illustrative data as example data. Do not mention component libraries, design inspirations, or internal implementation names. Use customer language: inventory, bills, cash, credit, suppliers, shops, and closing. Keep vendor comparisons in internal documentation.
