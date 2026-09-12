@@ -25,6 +25,8 @@ import {
   Barcode,
   Download,
   Store,
+  Menu,
+  X,
 } from "lucide-react";
 import {
   cash,
@@ -114,7 +116,8 @@ export default function RetailWorkspace({
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
-    [selectedContact, setSelectedContact] = useState("");
+    [selectedContact, setSelectedContact] = useState(""),
+    [navOpen, setNavOpen] = useState(false);
   const lock = useRef(false),
     request = useRef<{ key: string; id: string } | null>(null),
     generation = useRef(0);
@@ -432,6 +435,7 @@ export default function RetailWorkspace({
       setContactId(next.contactId);setMethod(next.method);setPaid(next.paid);setReference(next.reference);setInterstate(next.interstate);setSupplyState(next.supplyState);
     }
     setView(v);
+    setNavOpen(false);
     setQuery("");
     setCategory("");
     setLow(false);
@@ -559,7 +563,11 @@ export default function RetailWorkspace({
   );
   return (
     <section className="retail" aria-busy={busy}>
-      <aside className="retail-nav">
+      {navOpen && <button type="button" className="retail-nav-backdrop" aria-label={t("Close navigation", "नेव्हिगेशन बंद करा")} onClick={() => setNavOpen(false)} />}
+      <aside id="retail-navigation" className={`retail-nav${navOpen ? " is-open" : ""}`}>
+        <button className="retail-nav-close" type="button" aria-label={t("Close navigation", "नेव्हिगेशन बंद करा")} onClick={() => setNavOpen(false)}>
+          <X size={21} />
+        </button>
         <div className="retail-shop">
           <Store />
           <div>
@@ -582,6 +590,10 @@ export default function RetailWorkspace({
       <div className="retail-main">
         <header className="retail-heading">
           <div>
+            <button className="retail-nav-toggle" type="button" aria-expanded={navOpen} aria-controls="retail-navigation" onClick={() => setNavOpen(true)}>
+              <Menu size={20} />
+              <span>{t("Menu", "मेनू")}</span>
+            </button>
             <p>{t("YOUR SHOP WORKSPACE", "तुमच्या दुकानाचे कार्यस्थळ")}</p>
             <h2>
               {t(

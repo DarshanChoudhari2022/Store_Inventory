@@ -68,6 +68,11 @@
   flex-direction: column;
   gap: 6px;
 }
+.retail-nav-toggle,
+.retail-nav-close,
+.retail-nav-backdrop {
+  display: none !important;
+}
 .retail-shop {
   display: flex;
   align-items: center;
@@ -644,21 +649,61 @@
 @media (max-width: 850px) {
   .retail {
     display: block;
+    position: relative;
   }
   .retail-nav {
-    flex-direction: row;
-    overflow-x: auto;
-    border-right: 0;
-    border-bottom: 1px solid #dce5df;
-    padding: 9px;
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 20;
+    width: min(290px, 84vw);
+    height: 100dvh;
+    overflow-y: auto;
+    border: 0;
+    padding: 22px 14px;
+    box-shadow: 12px 0 30px rgba(24, 48, 38, .18);
+    transform: translateX(-105%);
+    transition: transform .2s ease;
   }
-  .retail-shop {
-    display: none;
+  .retail-nav.is-open {
+    transform: translateX(0);
   }
-  .retail-nav > button {
-    white-space: nowrap;
+  .retail-nav-backdrop {
+    display: block !important;
+    position: fixed;
+    inset: 0;
+    z-index: 19;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    border-radius: 0;
+    background: rgba(16, 31, 24, .42);
+  }
+  .retail-nav-close {
+    display: inline-flex !important;
+    align-self: flex-end;
+    min-height: 38px !important;
+    width: 38px;
+    padding: 7px !important;
+    margin: -8px 0 4px;
+    border: 0 !important;
+    background: transparent !important;
+  }
+  .retail-nav-toggle {
+    display: inline-flex !important;
+    min-height: 38px !important;
+    padding: 7px 10px !important;
+    margin-bottom: 10px;
+    border: 1px solid #d5e1da !important;
+    background: #fff !important;
+    color: #234e3b !important;
+  }
+  .retail-nav .retail-shop {
+    display: flex;
+  }
+  .retail-nav > button:not(.retail-nav-close) {
+    width: 100%;
     flex-shrink: 0;
-    padding: 10px 12px;
+    padding: 11px 12px;
   }
   .retail-main {
     padding: 18px;
@@ -717,11 +762,6 @@
   .retail-dates input {
     font-size: 14px;
     padding: 9px;
-  }
-  .retail-nav {
-    position: sticky;
-    top: 0;
-    z-index: 3;
   }
   .retail-panel {
     padding: 14px;
