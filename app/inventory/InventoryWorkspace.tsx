@@ -4,6 +4,7 @@ import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'reac
 import { closingCsv, Dashboard, indiaDate, Item, ItemDraft, money, stockStatus, totals, validateItem } from './domain';
 import { inventoryCopy } from './copy';
 import './inventory.css';
+import VoiceInput from '../retail/VoiceInput';
 
 type Rpc = (name: string, args: Record<string, unknown>) => Promise<unknown>;
 type Action = { type: 'sale' | 'stock' | 'add' | 'edit' | 'delete'; item?: Item };
@@ -82,7 +83,7 @@ export default function InventoryWorkspace({ data, lang, rpc, refresh }: {
     {notice && <p className="workspace-notice" role="status">{notice}</p>}
     {view === 'inventory' && <>
       <div className="workspace-filters">
-        <label className="search-field">{c.search}<input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder={c.search} /></label>
+        <label className="search-field">{c.search}<VoiceInput type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder={c.search} /></label>
         <label>{c.category}<select value={category} onChange={e => setCategory(e.target.value)}><option value="">{c.allCategories}</option>{categories.map(cat => <option key={cat}>{cat}</option>)}</select></label>
         <label>{c.status}<select value={stock} onChange={e => setStock(e.target.value)}><option value="">{c.allStock}</option><option value="in">{c.in}</option><option value="low">{c.low}</option><option value="out">{c.out}</option><option value="restock">{c.lowStock}</option></select></label>
         {(query || category || stock) && <button onClick={() => { setQuery(''); setCategory(''); setStock(''); }}>{c.clear}</button>}
@@ -181,20 +182,20 @@ function ActionDialog({ action, data, lang, rpc, onClose, onSaved, onDelete }: {
     <form onSubmit={submit}><header><h2 id="action-title">{title}</h2><button type="button" disabled={busy} onClick={onClose}>{c.cancel}</button></header>
       <fieldset disabled={busy || uncertain}>
         {(action.type === 'sale' || action.type === 'stock') && <>
-          <label>{c.saleSearch}<input autoFocus type="search" value={search} onChange={e => setSearch(e.target.value)} /></label>
+          <label>{c.saleSearch}<VoiceInput autoFocus type="search" value={search} onChange={e => setSearch(e.target.value)} /></label>
           <label>{c.product}<select required value={itemId} onChange={e => { setItemId(e.target.value); const i = data.items.find(i => i.id === e.target.value); setPrice(String(i?.defaultSellingPrice ?? '')); setCount(String(i?.stock ?? '')); }}><option value="">{c.choose}</option>{data.items.filter(i => i.id === itemId || `${i.name} ${i.category}`.toLocaleLowerCase().includes(search.toLocaleLowerCase())).map(i => <option value={i.id} key={i.id} disabled={action.type === 'sale' && i.stock === 0}>{i.name} ({c.available}: {i.stock})</option>)}</select></label>
-          {action.type === 'stock' ? <><p>{c.stockHint}</p><label>{c.stock}<input required type="number" min="0" step="1" max="2147483647" value={count} onChange={e => setCount(e.target.value)} /></label></> : <>
-            <div className="form-pair"><label>{c.qty}<input required type="number" min="1" step="1" max={selected?.stock} value={qty} onChange={e => setQty(e.target.value)} /></label>
-              <label>{c.salePrice}<input required type="number" min="0" max="9999999999.99" step="0.01" value={price} onChange={e => setPrice(e.target.value)} /></label></div>
+          {action.type === 'stock' ? <><p>{c.stockHint}</p><label>{c.stock}<VoiceInput required type="number" min="0" step="1" max="2147483647" value={count} onChange={e => setCount(e.target.value)} /></label></> : <>
+            <div className="form-pair"><label>{c.qty}<VoiceInput required type="number" min="1" step="1" max={selected?.stock} value={qty} onChange={e => setQty(e.target.value)} /></label>
+              <label>{c.salePrice}<VoiceInput required type="number" min="0" max="9999999999.99" step="0.01" value={price} onChange={e => setPrice(e.target.value)} /></label></div>
             <div className="sale-preview"><span>{c.revenue}: {money(Number(qty)*Number(price))}</span><span>{c.profit}: {money(Number(qty)*(Number(price)-(selected?.buyingPrice ?? 0)))}</span></div>
           </>}
         </>}
         {(action.type === 'add' || action.type === 'edit') && <>
-          <label>{c.name}<input autoFocus required maxLength={120} value={draft.name} onChange={e => change('name', e.target.value)} /></label>
-          <label>{c.category}<input required list="shop-categories" maxLength={80} value={draft.category} onChange={e => change('category', e.target.value)} /><datalist id="shop-categories">{[...new Set([...data.items.map(i => i.category), 'Kirana', 'Pan Masala', 'Cigarettes', 'Accessories', 'General'])].map(cat => <option key={cat} value={cat} />)}</datalist></label>
-          <div className="form-pair"><label>{c.buy}<input required type="number" min="0" step="0.01" max="9999999999.99" value={draft.buyingPrice} onChange={e => change('buyingPrice', e.target.value === '' ? '' : Number(e.target.value))} /></label><label>{c.sell}<input required type="number" min="0" step="0.01" max="9999999999.99" value={draft.defaultSellingPrice} onChange={e => change('defaultSellingPrice', e.target.value === '' ? '' : Number(e.target.value))} /></label></div>
-          <div className="form-pair">{action.type === 'add' && <label>{c.stock}<input required type="number" min="0" step="1" max="2147483647" value={draft.stock} onChange={e => change('stock', e.target.value === '' ? '' : Number(e.target.value))} /></label>}
-          <label>{c.threshold}<input required type="number" min="0" step="1" max="2147483647" value={draft.reorderLevel} onChange={e => change('reorderLevel', e.target.value === '' ? '' : Number(e.target.value))} /></label></div>
+          <label>{c.name}<VoiceInput autoFocus required maxLength={120} value={draft.name} onChange={e => change('name', e.target.value)} /></label>
+          <label>{c.category}<VoiceInput required list="shop-categories" maxLength={80} value={draft.category} onChange={e => change('category', e.target.value)} /><datalist id="shop-categories">{[...new Set([...data.items.map(i => i.category), 'Kirana', 'Pan Masala', 'Cigarettes', 'Accessories', 'General'])].map(cat => <option key={cat} value={cat} />)}</datalist></label>
+          <div className="form-pair"><label>{c.buy}<VoiceInput required type="number" min="0" step="0.01" max="9999999999.99" value={draft.buyingPrice} onChange={e => change('buyingPrice', e.target.value === '' ? '' : Number(e.target.value))} /></label><label>{c.sell}<VoiceInput required type="number" min="0" step="0.01" max="9999999999.99" value={draft.defaultSellingPrice} onChange={e => change('defaultSellingPrice', e.target.value === '' ? '' : Number(e.target.value))} /></label></div>
+          <div className="form-pair">{action.type === 'add' && <label>{c.stock}<VoiceInput required type="number" min="0" step="1" max="2147483647" value={draft.stock} onChange={e => change('stock', e.target.value === '' ? '' : Number(e.target.value))} /></label>}
+          <label>{c.threshold}<VoiceInput required type="number" min="0" step="1" max="2147483647" value={draft.reorderLevel} onChange={e => change('reorderLevel', e.target.value === '' ? '' : Number(e.target.value))} /></label></div>
         </>}
         {action.type === 'delete' && <><p className="delete-name">{action.item?.name}</p><p>{c.deleteHint}</p></>}
       </fieldset>

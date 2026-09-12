@@ -8,7 +8,7 @@ Reference: [Dhando POS website](https://dhandopos.in/) and [public showcase](htt
 
 Our assessment uses the actual InventoryWorkspace, domain types, schema, RPC functions, and existing tests. Older PRD descriptions are not reliable implementation evidence: they still mention seeded inventory and missing features that have since changed. This specification supersedes the old V1 non-goals for future retail POS work; it does not imply those features are implemented.
 
-## Feature comparison
+## Baseline feature comparison (before implementation)
 
 | Capability | Dhando advertises | Our implementation | Needed |
 |---|---|---|---|
@@ -69,4 +69,8 @@ Update the landing page's feature claims only when the corresponding workflow is
 
 ## Status
 
-Retail-first workflows are implemented in the application and covered by the SQL test suite: multi-shop administration, atomic invoices, stock and purchase movements, customer/supplier balances, returns, cash reconciliation, GST snapshots, receipts, barcode tools, reviewed OCR import, offline sales outbox, and recurring templates. The migration must still be applied to the configured Supabase database before these screens can use live data. Restaurant tables, kitchen tickets, GST filing/e-invoice submission, and unattended server-side recurring scheduling remain outside the retail-first scope.
+The retail migration was applied to Supabase and the RPC endpoint became available on September 11, 2026. The SQL tests cover multi-shop authorization, atomic invoices, stock/purchase movements, customer/supplier balances, returns, cash reconciliation, GST snapshots, and manually generated recurring bills. Browser checks used an isolated SQL-backed fixture: super-admin shop creation, weighted checkout, receipt totals, and stock changes were verified.
+
+September 12 voice follow-up: reusable voice inputs now cover editable text/numeric/date fields, search, super-admin shop forms, legacy inventory forms, and OCR review text. Passwords, file inputs, checkboxes, and selectors retain their native controls. Dictation uses the selected app language (English/Marathi), permits one active microphone, stops on unmount, preserves selected text, validates field limits, and surfaces errors. Browser providers may process speech online; this is not guaranteed local transcription. Ambiguous amounts require manual correction and dates require YYYY-MM-DD. Transcription is never an instruction to save a form or post a bill.
+
+Validation: 37 automated tests pass; production build and lint pass. Desktop and narrow-screen product forms were inspected. Actual speech accuracy/permissions need testing with the user's microphone and supported browser. Camera scanning, OCR accuracy, physical receipt/label printers, and complete production offline reload/reconciliation still need device-level acceptance. Offline bills require manual sync; recurring templates require manual generation. Full background scheduling, appearance preferences, complete Marathi translation, batch-level expiry tracking, and granular staff roles remain pending. Restaurant workflows remain excluded. GST filing and e-invoice submission are not implemented.

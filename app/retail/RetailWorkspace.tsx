@@ -625,7 +625,7 @@ export default function RetailWorkspace({
           <div className="retail-dates">
             <label>
               {t("From", "पासून")}
-              <input
+              <VoiceInput
                 type="date"
                 value={from}
                 max={to}
@@ -634,7 +634,7 @@ export default function RetailWorkspace({
             </label>
             <label>
               {t("To", "पर्यंत")}
-              <input
+              <VoiceInput
                 type="date"
                 value={to}
                 min={from}
@@ -650,7 +650,7 @@ export default function RetailWorkspace({
               <div className="retail-catalog">
                 <form className="retail-search" onSubmit={scanSubmit}>
                   <Search size={19} />
-                  <input
+                  <VoiceInput
                     aria-label="Search products or scan barcode"
                     placeholder={t(
                       "Search name or scan barcode…",
@@ -767,7 +767,7 @@ export default function RetailWorkspace({
                         <div className="retail-line-fields">
                           <label>
                             {t("Qty", "संख्या")}
-                            <input
+                            <VoiceInput
                               type="number"
                               min="0.001"
                               step={
@@ -783,7 +783,7 @@ export default function RetailWorkspace({
                           </label>
                           <label>
                             {t("Price", "किंमत")}
-                            <input
+                            <VoiceInput
                               type="number"
                               min="0"
                               step="0.01"
@@ -795,7 +795,7 @@ export default function RetailWorkspace({
                           </label>
                           <label>
                             {t("Off %", "सूट %")}
-                            <input
+                            <VoiceInput
                               type="number"
                               min="0"
                               max="100"
@@ -836,7 +836,7 @@ export default function RetailWorkspace({
                   {purchasing && (
                     <label>
                       {t("Supplier bill reference", "पुरवठादार बिल क्रमांक")}
-                      <input
+                      <VoiceInput
                         value={reference}
                         onChange={(e) => setReference(e.target.value)}
                       />
@@ -862,7 +862,7 @@ export default function RetailWorkspace({
                         "Amount paid (leave blank for full)",
                         "दिलेली रक्कम (पूर्ण असल्यास रिक्त)",
                       )}
-                      <input
+                      <VoiceInput
                         type="number"
                         min="0"
                         max={total}
@@ -876,7 +876,7 @@ export default function RetailWorkspace({
                   {!purchasing && data.shop.settings.gstin && (
                     <>
                       <label className="retail-check">
-                        <input
+                        <VoiceInput
                           type="checkbox"
                           checked={interstate}
                           onChange={(e) => setInterstate(e.target.checked)}
@@ -886,7 +886,7 @@ export default function RetailWorkspace({
                       {interstate && (
                         <label>
                           Place of supply
-                          <input
+                          <VoiceInput
                             value={supplyState}
                             onChange={(e) => setSupplyState(e.target.value)}
                             placeholder="State name and code"
@@ -954,14 +954,14 @@ export default function RetailWorkspace({
         {view === "products" && (
           <>
             <div className="retail-toolbar">
-              <input
+              <VoiceInput
                 aria-label="Search products"
                 placeholder={t("Search products", "उत्पादने शोधा")}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
               <label className="retail-check">
-                <input
+                <VoiceInput
                   type="checkbox"
                   checked={low}
                   onChange={(e) => setLow(e.target.checked)}
@@ -999,7 +999,7 @@ export default function RetailWorkspace({
               </button>
               <label className="retail-upload">
                 Import CSV
-                <input
+                <VoiceInput
                   type="file"
                   accept=".csv,text/csv"
                   onChange={(e) => {
@@ -1106,7 +1106,7 @@ export default function RetailWorkspace({
         {(view === "customers" || view === "suppliers") && (
           <>
             <div className="retail-toolbar">
-              <input
+              <VoiceInput
                 placeholder={t("Search name or phone", "नाव किंवा फोन शोधा")}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
@@ -1168,7 +1168,7 @@ export default function RetailWorkspace({
                 <div className="retail-dates">
                   <label>
                     From
-                    <input
+                    <VoiceInput
                       type="date"
                       value={from}
                       onChange={(e) => setFrom(e.target.value)}
@@ -1176,7 +1176,7 @@ export default function RetailWorkspace({
                   </label>
                   <label>
                     To
-                    <input
+                    <VoiceInput
                       type="date"
                       value={to}
                       onChange={(e) => setTo(e.target.value)}
@@ -1906,6 +1906,7 @@ function Field({
       {label}
       <VoiceInput
         name={name}
+        aria-label={label}
         defaultValue={value}
         type={type}
         required={required}

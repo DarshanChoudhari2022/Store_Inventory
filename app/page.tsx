@@ -663,7 +663,7 @@ export default function Home() {
                 <label className="mt-4 block text-sm font-medium" htmlFor="password">
                   {copy.password}
                 </label>
-                <input
+                <VoiceInput
                   id="password"
                   name="password"
                   type="password"
@@ -763,9 +763,9 @@ export default function Home() {
                                   const f = new FormData(e.currentTarget);
                                   void updateShop(shop, String(f.get('name')), String(f.get('area')), f.get('active') === 'on');
                                 }}>
-                                  <label>Shop name<input name="name" defaultValue={shop.name} required maxLength={120} className="block border p-2" /></label>
-                                  <label>Area<input name="area" defaultValue={shop.area} required maxLength={120} className="block border p-2" /></label>
-                                  <label><input type="checkbox" name="active" defaultChecked={shop.active} /> Shop active</label>
+                                  <label>Shop name<VoiceInput name="name" defaultValue={shop.name} required maxLength={120} className="block border p-2" /></label>
+                                  <label>Area<VoiceInput name="area" defaultValue={shop.area} required maxLength={120} className="block border p-2" /></label>
+                                  <label><VoiceInput type="checkbox" name="active" defaultChecked={shop.active} /> Shop active</label>
                                   <button disabled={isBusy} className="border p-2">Save shop</button>
                                 </form>
                               </details>
@@ -953,8 +953,9 @@ const Field = memo(function Field({
   return (
     <label className="form-field block text-sm font-medium">
       {label}
-      <input
+      <VoiceInput
         name={name}
+        aria-label={label}
         type={type}
         min={type === 'number' ? '0' : undefined}
         step={type === 'number' ? '0.01' : undefined}

@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import type { CartLine, Product } from "./domain";
+import VoiceInput, { VoiceTextarea } from "./VoiceInput";
 
 export default function PurchaseScan({
   products,
@@ -106,7 +107,7 @@ export default function PurchaseScan({
       </p>
       <label className="retail-upload">
         Choose bill images
-        <input
+        <VoiceInput
           disabled={busy}
           type="file"
           multiple
@@ -124,7 +125,7 @@ export default function PurchaseScan({
         <>
           <label>
             Extracted text
-            <textarea
+            <VoiceTextarea
               rows={9}
               value={text}
               onChange={(e) => setText(e.target.value)}
@@ -166,7 +167,7 @@ export default function PurchaseScan({
               <div className="retail-form-grid">
                 <label>
                   Quantity
-                  <input
+                  <VoiceInput
                     type="number"
                     step="0.001"
                     min="0.001"
@@ -182,7 +183,7 @@ export default function PurchaseScan({
                 </label>
                 <label>
                   Unit rate
-                  <input
+                  <VoiceInput
                     type="number"
                     min="0"
                     step="0.01"
