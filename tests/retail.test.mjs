@@ -22,14 +22,15 @@ test('complete multi-shop retail transactions',async t=>{
  const superToken=(await call('login_user',['owner','owner-test-password'])).token;
  const a=await call('create_shop',[superToken,'Shop A','Pune','shopa','strong-password-a']);
  const b=await call('create_shop',[superToken,'Shop B','Mumbai','shopb','strong-password-b']);
- let token=(await call('login_user',['shopa','strong-password-a'])).token;
+ const shopLogin=await call('login_user',['shopa','strong-password-a']);
+ let token=shopLogin.token;
  const other=(await call('login_user',['shopb','strong-password-b'])).token;
  const day=(await db.query("select (now() at time zone 'Asia/Kolkata')::date::text d")).rows[0].d;
  const act=(action,data={},id=crypto.randomUUID(),tok=token,shop=a.id)=>call('retail_action',[tok,shop,id,action,JSON.stringify(data)]);
  const workspace=(tok=token,shop=a.id)=>call('retail_workspace',[tok,shop,day,day]);
  let product,weighted,customer,supplier,invoice;
  const draft={name:'Tea',category:'Grocery',cost:8,price:10,stock:100,reorder:5,barcode:'123456',unit:'pcs',hsn:'0902',tax:0,expiry:''};
- await t.test('super admin creates two empty shops with separate usable credentials',async()=>{assert.equal((await call('list_shops',[superToken])).length,2);assert.equal((await workspace()).products.length,0);assert.equal((await workspace(other,b.id)).products.length,0);await assert.rejects(call('create_shop',[token,'X','Pune','x','strong-pass-xxx']),/Owner/);});
+ await t.test('super admin creates two empty shops with separate usable credentials',async()=>{assert.equal((await call('list_shops',[superToken])).length,2);await assert.rejects(call('list_shops',[token]),/Super admin/);assert.equal(shopLogin.role,'shop');assert.equal(shopLogin.shopId,a.id);assert.equal((await workspace()).products.length,0);assert.equal((await workspace(other,b.id)).products.length,0);await assert.rejects(call('create_shop',[token,'X','Pune','x','strong-pass-xxx']),/Owner/);});
  await t.test('shop creates products and independent customer/supplier contacts',async()=>{product=await act('product',draft);weighted=await act('product',{...draft,name:'Rice',barcode:'',unit:'kg',stock:20.5});customer=await act('contact',{kind:'customer',name:'Customer A'});supplier=await act('contact',{kind:'supplier',name:'Supplier A'});assert.equal((await workspace()).products.length,2);});
  await t.test('every retail operation rejects cross-shop access and arbitrary identifiers',async()=>{await assert.rejects(workspace(other,a.id),/Shop access/);for(const action of ['checkout','product','contact','settle','purchase','expense','return','settings','register_open','recurring'])await assert.rejects(act(action,{},crypto.randomUUID(),other,a.id),/Shop access/);await assert.rejects(act('checkout',{lines:[{id:product.id,qty:1,price:10}],method:'cash'},crypto.randomUUID(),other,b.id),/Product does not belong/);await assert.rejects(call('admin_update_shop',[token,b.id,'Hacked','Pune',true]),/Super admin/);});
  await t.test('cash register and atomic multi-item checkout',async()=>{await act('register_open',{amount:100});invoice=await act('checkout',{lines:[{id:product.id,qty:2,price:10},{id:weighted.id,qty:1.5,price:20}],method:'cash'});assert.equal(invoice.total,50);const w=await workspace();assert.equal(w.products.find(p=>p.id===product.id).stock,98);assert.equal(w.products.find(p=>p.id===weighted.id).stock,19);assert.equal(w.registers[0].currentExpected,150);assert.equal(w.invoices.length,1);});

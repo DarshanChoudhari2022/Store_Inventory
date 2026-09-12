@@ -93,7 +93,10 @@ as $$
     from app_sessions
     where token = p_token
       and expires_at > now()
-      and (role = 'owner' or shop_id = p_shop_id)
+      and (
+        role = 'owner'
+        or (role = 'shop' and shop_id = p_shop_id)
+      )
   );
 $$;
 

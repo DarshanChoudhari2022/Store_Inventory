@@ -72,7 +72,7 @@ do $$ declare n text; begin
 end $$;
 
 create or replace function can_access_shop(p_token uuid,p_shop_id uuid) returns boolean language sql security definer set search_path=public,extensions as $$
- select exists(select 1 from app_sessions s join shops h on h.id=p_shop_id where s.token=p_token and s.expires_at>now() and (s.role='owner' or (s.shop_id=p_shop_id and h.active)));
+ select exists(select 1 from app_sessions s join shops h on h.id=p_shop_id where s.token=p_token and s.expires_at>now() and (s.role='owner' or (s.role='shop' and s.shop_id=p_shop_id and h.active)));
 $$;
 
 create or replace function public.admin_update_shop(p_token uuid,p_shop_id uuid,p_name text,p_area text,p_active boolean) returns jsonb
