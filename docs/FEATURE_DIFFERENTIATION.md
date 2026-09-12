@@ -35,3 +35,9 @@ StoreStock's differentiation is a retail-first multi-shop control plane: indepen
 5. Add logo upload, sound preferences, skip dates and route lists.
 
 Do not claim complete Dhando parity until those gaps are implemented and accepted on real devices.
+
+## Implementation update
+
+StoreStock now supports individual full-access shop operators with owner-controlled creation, pause and password reset. Restricted cashier permissions remain a gap. Clothing products now have style/SKU, size, colour, MRP and independent stock, CSV imports and variant duplication. Products can be made inactive while preserving stock; deletion requires the current user's password and retains an audit snapshot. Products referenced by bills are retained for returns.
+
+The app already has manual recurring Skip and Pause/Resume controls; the earlier statement that all skip control is absent was too broad. Advance skip calendars and route-wise delivery lists remain unimplemented.

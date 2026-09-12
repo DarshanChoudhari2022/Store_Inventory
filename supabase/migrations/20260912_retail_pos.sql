@@ -9,6 +9,11 @@ alter table items add column if not exists unit text not null default 'pcs';
 alter table items add column if not exists hsn text not null default '';
 alter table items add column if not exists tax_rate numeric(5,2) not null default 0 check(tax_rate between 0 and 100);
 alter table items add column if not exists expiry_date date;
+alter table items add column if not exists style_code text not null default '' check(length(style_code)<=80);
+alter table items add column if not exists size text not null default '' check(length(size)<=40);
+alter table items add column if not exists colour text not null default '' check(length(colour)<=60);
+alter table items add column if not exists mrp numeric(12,2) check(mrp>=0);
+alter table items add column if not exists is_active boolean not null default true;
 create unique index if not exists retail_barcode on items(shop_id,barcode) where barcode <> '';
 
 create table if not exists retail_contacts (
@@ -173,11 +178,15 @@ begin
      if not found then raise exception 'Product not found'; end if;
      if (p_data->>'expectedStock')::numeric is distinct from item.stock then raise exception 'Stock changed. Reload and count again.'; end if;
      update items set name=trim(p_data->>'name'),category=trim(p_data->>'category'),buying_price=amount,default_selling_price=price,stock=qty,reorder_level=(p_data->>'reorder')::numeric,barcode=coalesce(p_data->>'barcode',''),unit=p_data->>'unit',hsn=coalesce(p_data->>'hsn',''),tax_rate=rate,expiry_date=nullif(p_data->>'expiry','')::date where id=v_id;
-     insert into retail_movements(shop_id,item_id,item_name,quantity,reason) values(p_shop_id,v_id,p_data->>'name',qty-item.stock,'Physical count / product edit');
+     insert into retail_movements(shop_id,item_id,item_name,quantity,reason) values(p_shop_id,v_id,concat_ws(' · ',p_data->>'name',nullif(coalesce(p_data->>'style',item.style_code),''),nullif(coalesce(p_data->>'size',item.size),''),nullif(coalesce(p_data->>'colour',item.colour),'')),qty-item.stock,'Physical count / product edit');
    else
      insert into items(shop_id,name,category,buying_price,default_selling_price,stock,reorder_level,barcode,unit,hsn,tax_rate,expiry_date) values(p_shop_id,trim(p_data->>'name'),trim(p_data->>'category'),amount,price,qty,(p_data->>'reorder')::numeric,coalesce(p_data->>'barcode',''),p_data->>'unit',coalesce(p_data->>'hsn',''),rate,nullif(p_data->>'expiry','')::date) returning id into v_id;
-     insert into retail_movements(shop_id,item_id,item_name,quantity,reason) values(p_shop_id,v_id,p_data->>'name',qty,'Opening stock');
+     insert into retail_movements(shop_id,item_id,item_name,quantity,reason) values(p_shop_id,v_id,concat_ws(' · ',p_data->>'name',nullif(p_data->>'style',''),nullif(p_data->>'size',''),nullif(p_data->>'colour','')),qty,'Opening stock');
    end if;
+   if length(coalesce(p_data->>'style',''))>80 or length(coalesce(p_data->>'size',''))>40 or length(coalesce(p_data->>'colour',''))>60 then raise exception 'Check style, size and colour lengths'; end if;
+   if nullif(p_data->>'mrp','')::numeric is not null and (nullif(p_data->>'mrp','')::numeric<price or round(nullif(p_data->>'mrp','')::numeric,2)<>nullif(p_data->>'mrp','')::numeric) then raise exception 'MRP must have at most two decimal places and cannot be below the selling price'; end if;
+   update items set style_code=coalesce(p_data->>'style',style_code),size=coalesce(p_data->>'size',size),colour=coalesce(p_data->>'colour',colour),mrp=case when p_data ? 'mrp' then nullif(p_data->>'mrp','')::numeric else mrp end where id=v_id;
+   if p_data ? 'active' then update items set is_active=(p_data->>'active')::boolean where id=v_id; end if;
    result:=jsonb_build_object('id',v_id);
  elsif p_action in ('checkout','purchase','recurring_run') then
    if p_action='recurring_run' then
@@ -209,6 +218,7 @@ begin
        net:=gross; tax:=0;
        update items set stock=stock+qty,buying_price=price where id=item.id;
      else
+       if not item.is_active then raise exception 'Product is inactive: %',item.name; end if;
        if item.stock<qty then raise exception 'Insufficient stock for %',item.name; end if;
        if item.expiry_date is not null and item.expiry_date<v_date then raise exception 'Product expired: %',item.name; end if;
        rate:=case when coalesce(h.settings->>'gstin','')<>'' then item.tax_rate else 0 end;
@@ -217,8 +227,8 @@ begin
        update items set stock=stock-qty where id=item.id;
      end if;
      v_total:=v_total+gross; v_net:=v_net+net; v_tax:=v_tax+tax; v_cost:=v_cost+round(qty*item.buying_price,2);
-     result:=result||jsonb_build_array(jsonb_build_object('id',item.id,'name',item.name,'qty',qty,'price',price,'discount',discount,'unit',item.unit,'hsn',item.hsn,'rate',case when p_action='purchase' then 0 else rate end,'net',net,'tax',tax,'total',gross,'cost',round(qty*item.buying_price,2)));
-     insert into retail_movements(shop_id,item_id,item_name,quantity,reason) values(p_shop_id,item.id,item.name,case when p_action='purchase' then qty else -qty end,case when p_action='purchase' then 'Purchase received' else 'Sale' end);
+     result:=result||jsonb_build_array(jsonb_build_object('id',item.id,'name',concat_ws(' · ',item.name,nullif(item.style_code,''),nullif(item.size,''),nullif(item.colour,'')),'qty',qty,'price',price,'discount',discount,'unit',item.unit,'hsn',item.hsn,'rate',case when p_action='purchase' then 0 else rate end,'net',net,'tax',tax,'total',gross,'cost',round(qty*item.buying_price,2)));
+     insert into retail_movements(shop_id,item_id,item_name,quantity,reason) values(p_shop_id,item.id,concat_ws(' · ',item.name,nullif(item.style_code,''),nullif(item.size,''),nullif(item.colour,'')),case when p_action='purchase' then qty else -qty end,case when p_action='purchase' then 'Purchase received' else 'Sale' end);
    end loop;
    lines:=result;
    v_paid:=case when method='credit' then coalesce((p_data->>'paid')::numeric,0) else coalesce((p_data->>'paid')::numeric,v_total) end;

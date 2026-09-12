@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import {
   cash,
+  productName,
   today,
   lineTotal,
   report,
@@ -46,6 +47,7 @@ import BarcodeLabel from "./BarcodeLabel";
 import PurchaseScan from "./PurchaseScan";
 import VoiceInput from "./VoiceInput";
 import Appearance from './Appearance';
+import DeleteProductDialog from './DeleteProductDialog';
 import {
   readLocal,
   writeLocal,
@@ -93,6 +95,7 @@ export default function RetailWorkspace({
   const [scan, setScan] = useState(false),
     [labelProduct, setLabelProduct] = useState<Product | null>(null);
   const [purchaseScan, setPurchaseScan] = useState(false);
+  const [deleteProduct,setDeleteProduct]=useState<Product|null>(null);
   const [pending, setPending] = useState<PendingSale[]>([]),
     [offline, setOffline] = useState(false),
     [draftReady, setDraftReady] = useState(false);
@@ -445,15 +448,16 @@ export default function RetailWorkspace({
   const rows =
     data?.products.filter(
       (p) =>
+        (view === 'products' || p.is_active !== false) &&
         (!category || p.category === category) &&
         (!low || p.stock <= p.reorder_level) &&
-        `${p.name} ${p.barcode} ${p.category}`
+        `${productName(p)} ${p.barcode} ${p.category}`
           .toLowerCase()
           .includes(query.toLowerCase()),
     ) || [];
   const scanSubmit = (e: FormEvent) => {
     e.preventDefault();
-    const p = data?.products.find((p) => p.barcode === query.trim());
+    const p = data?.products.find((p) => p.barcode === query.trim() && p.is_active!==false);
     if (p) {
       add(p);
       setQuery("");
@@ -483,6 +487,8 @@ export default function RetailWorkspace({
         "tax",
         "expiry",
       ];
+      const clothingHeaders = [...expected,'style','size','colour','mrp'];
+      if(rows[0]?.map(s=>s.replace(/^\uFEFF/,'').trim().toLowerCase()).join(',')===clothingHeaders.join(',')) expected.push('style','size','colour','mrp');
       if (
         rows[0]
           ?.map((s) =>
@@ -759,7 +765,7 @@ export default function RetailWorkspace({
                         {p.category}
                         <Plus size={16} />
                       </span>
-                      <strong>{p.name}</strong>
+                      <strong>{productName(p)}</strong>
                       <b>
                         {cash(
                           purchasing ? p.buying_price : p.default_selling_price,
@@ -806,9 +812,9 @@ export default function RetailWorkspace({
                     return (
                       <div className="retail-cart-line" key={l.id}>
                         <div>
-                          <strong>{p?.name || "Unavailable product"}</strong>
+                          <strong>{p ? productName(p) : "Unavailable product"}</strong>
                           <button
-                            aria-label={`Remove ${p?.name}`}
+                            aria-label={`Remove ${p ? productName(p) : 'product'}`}
                             onClick={() =>
                               setCurrentCart((prev) =>
                                 prev.filter((x) => x.id !== l.id),
@@ -1049,8 +1055,10 @@ export default function RetailWorkspace({
                       "hsn",
                       "tax",
                       "expiry",
+                      "style", "size", "colour", "mrp",
                     ],
-                    ["Tea", "Grocery", 10, 15, 20, 5, "", "pcs", "", 0, ""],
+                    ["Tea", "Grocery", 10, 15, 20, 5, "", "pcs", "", 0, "", "", "", "", ""],
+                    ["Oxford shirt", "Shirts", 400, 600, 5, 1, "OX01-M-NAVY", "pcs", "", 0, "", "OX-01", "M", "Navy", 799],
                   ])
                 }
               >
@@ -1081,7 +1089,7 @@ export default function RetailWorkspace({
                 "Action",
               ]}
               rows={rows.map((p) => [
-                p.name,
+                `${productName(p)}${p.is_active===false?' · Inactive':''}`,
                 cash(p.default_selling_price),
                 cash(p.buying_price),
                 `${p.stock} ${p.unit}`,
@@ -1099,6 +1107,8 @@ export default function RetailWorkspace({
                   >
                     Label
                   </button>
+                  <button disabled={busy||offline} onClick={()=>setDeleteProduct(p)}>{t('Delete','हटवा')}</button>
+                  <button disabled={busy||offline} onClick={()=>setDialog({type:'product',product:{...p,id:'',size:'',colour:'',barcode:'',stock:0}})}>{t('Add size / colour','आकार / रंग जोडा')}</button>
                 </div>,
               ])}
             />
@@ -1579,6 +1589,13 @@ export default function RetailWorkspace({
           </form></>
         )}
       </div>
+      {deleteProduct && <DeleteProductDialog name={productName(deleteProduct)} lang={lang} onClose={()=>setDeleteProduct(null)} onDelete={async password=>{
+        const result=await rpcRef.current('delete_item_confirmed',{p_item_id:deleteProduct.id,p_password:password}) as {error?:string;deleted?:boolean};
+        if(result.error||!result.deleted)throw new Error(result.error||'Product was not deleted.');
+        setCart(current=>current.filter(line=>line.id!==deleteProduct.id));
+        setPurchaseCart(current=>current.filter(line=>line.id!==deleteProduct.id));
+        await reload();setNotice(t('Product deleted.','उत्पादन हटवले.'));
+      }}/>}
       {receipt && (
         <Receipt invoice={receipt} onClose={() => setReceipt(null)} />
       )}
@@ -1586,7 +1603,7 @@ export default function RetailWorkspace({
         <ScanBarcode
           onClose={() => setScan(false)}
           onFound={(code) => {
-            const p = data.products.find((p) => p.barcode === code);
+            const p = data.products.find((p) => p.barcode === code && p.is_active!==false);
             if (p) {
               add(p);
               setNotice(`Added ${p.name}`);
@@ -1618,7 +1635,7 @@ export default function RetailWorkspace({
         <FormDialog
           title={
             dialog.type === "product"
-              ? dialog.product
+              ? dialog.product?.id
                 ? "Edit product / stock count"
                 : "Add product"
               : dialog.type === "import"
@@ -1639,6 +1656,7 @@ export default function RetailWorkspace({
                 ...f,
                 id: dialog.product?.id || "",
                 expectedStock: dialog.product?.stock,
+                active:f.active==='on',
               };
             if (action === "customer" || action === "supplier") {
               payload = { ...f, kind: action };
@@ -1680,6 +1698,15 @@ export default function RetailWorkspace({
                 value={dialog.product?.category || "General"}
                 required
               />
+              <p className="retail-help">For clothing, add each size and colour as a separate product with its own barcode and stock. For example: Oxford shirt · SH-01 · M · Navy.</p>
+              <label className="retail-check"><input name="active" type="checkbox" defaultChecked={dialog.product?.is_active!==false}/>Available for sale</label>
+              <p className="retail-help">Turn off to hide this product from billing without changing stock or previous receipts.</p>
+              <div className="retail-form-grid">
+                <Field name="style" label="Style / SKU (optional)" value={dialog.product?.style_code}/>
+                <Field name="size" label="Size (optional)" value={dialog.product?.size}/>
+                <Field name="colour" label="Colour (optional)" value={dialog.product?.colour}/>
+                <Field name="mrp" label="MRP (optional)" value={dialog.product?.mrp ?? ''} type="number" min="0" step="0.01"/>
+              </div>
               <div className="retail-form-grid">
                 <Field
                   name="cost"
@@ -1833,7 +1860,7 @@ export default function RetailWorkspace({
                   <option value="">Choose product</option>
                   {data.products.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.name}
+                      {productName(p)}
                     </option>
                   ))}
                 </select>
@@ -1882,7 +1909,7 @@ export default function RetailWorkspace({
                 headers={["Name", "Category", "Stock", "Price"]}
                 rows={importRows
                   .slice(0, 20)
-                  .map((p) => [p.name, p.category, p.stock, p.price])}
+                  .map((p) => [[p.name,p.style,p.size,p.colour].filter(Boolean).join(' · '), p.category, p.stock, p.price])}
               />
               <p>
                 Review values before saving. If a row fails, already saved

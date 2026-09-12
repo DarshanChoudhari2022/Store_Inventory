@@ -14,6 +14,10 @@ try {
  const b=await call('create_shop',[owner.token,'Verification B','Test only','b-'+suffix,password]);
  const sessionA=await call('login_user',['a-'+suffix,password]);
  const sessionB=await call('login_user',['b-'+suffix,password]);
+ const staffRows=await call('manage_shop_staff',[owner.token,a.id,'create',JSON.stringify({name:'Verification operator',username:'staff-'+suffix,password})]);
+ const staffLogin=await call('login_user',['staff-'+suffix,password]);assert.equal(staffLogin.shopId,a.id);
+ await call('manage_shop_staff',[owner.token,a.id,'pause',JSON.stringify({id:staffRows[0].id})]);
+ assert.equal(await call('can_access_shop',[staffLogin.token,a.id]),false);
  const action=(name,data,id=crypto.randomUUID())=>call('retail_action',[sessionA.token,a.id,id,name,JSON.stringify(data)]);
  const product=await action('product',{name:'Verification item',category:'Test',price:20,cost:10,stock:5,reorder:1,unit:'pcs',barcode:'verify-'+suffix,hsn:'',tax:0,expiry:''});
  const customer=await action('contact',{name:'Verification customer',kind:'customer'});
@@ -31,6 +35,10 @@ try {
  assert.equal((await call('retail_workspace',[sessionB.token,b.id,day,day])).products.length,0);
  await action('settle',{contactId:customer.id,amount:30,method:'upi'});
  assert.equal((await call('retail_workspace',[sessionA.token,a.id,day,day])).contacts[0].balance,0);
+ const removable=await action('product',{name:'Verification variant',category:'Test',price:20,cost:10,stock:1,reorder:0,unit:'pcs',style:'VERIFY',size:'M',colour:'Navy',mrp:25});
+ assert.match((await call('delete_item_confirmed',[sessionA.token,removable.id,'wrong'])).error,/Incorrect password/);
+ assert.equal((await call('delete_item_confirmed',[sessionA.token,removable.id,password])).deleted,true);
+ assert.match((await call('delete_item_confirmed',[sessionA.token,product.id,password])).error,/bill history/);
  await client.query('rollback');
  assert.equal((await client.query('select count(*)::int n from owner_accounts where username=$1',[username])).rows[0].n,0);
  console.log('Live verification passed: super-admin creates independent shops, both logins work, checkout retries save once, stock and credit reconcile, cross-shop access is denied. All verification records rolled back.');

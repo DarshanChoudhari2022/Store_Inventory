@@ -3,6 +3,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { FormEvent, memo, useEffect, useEffectEvent, useRef, useState } from 'react';
 import RetailWorkspace from './retail/RetailWorkspace';
+import StaffManagement from './retail/StaffManagement';
 import InventoryWorkspace from './inventory/InventoryWorkspace';
 import VoiceInput from './retail/VoiceInput';
 import { AppearanceBootstrap } from './retail/Appearance';
@@ -848,6 +849,11 @@ export default function Home() {
           <button className="ml-auto rounded border px-3 py-2" onClick={() => setOwnerOpen(true)}>{lang === 'mr' ? 'दुकाने व्यवस्थापित करा' : 'Manage / add shops'}</button>
         </div>}
 
+        {session.role==='owner' && dashboard && <StaffManagement key={session.token+dashboard.shop.id} shopName={dashboard.shop.name} rpc={async(action,details)=>{
+          const {data,error}=await getSupabaseClient().rpc('manage_shop_staff',{p_token:session.token,p_shop_id:dashboard.shop.id,p_action:action,p_data:details});
+          if(error)throw new Error(error.message);
+          return data;
+        }}/>}
         {dashboard ? (
           <RetailWorkspace
             fallback={<InventoryWorkspace data={dashboard} lang={lang} rpc={async (name, args) => {

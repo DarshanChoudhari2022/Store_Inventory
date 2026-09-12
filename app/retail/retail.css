@@ -31,6 +31,9 @@
 [data-retail-theme="dark"] .retail-nav > button[aria-current] { background:#304852; }
 [data-retail-theme="dark"] .retail .retail-warning { background:#403620; color:#ffe4a4; }
 [data-retail-theme="dark"] .retail .retail-notice { background:#203e32; color:#d0f5de; }
+[data-retail-theme="dark"] .dashboard-shell .staff-management { background:#1b2c36; color:#e1e9ec; }
+[data-retail-theme="dark"] .staff-management :is(input,button) { background:#14232c; color:#e1e9ec; border-color:#526773; }
+[data-retail-theme="dark"] .staff-management summary { color:#d0f5de; }
 [data-retail-theme="dark"] .retail .retail-error { background:#432925; color:#ffd0c2; }
 .retail button,
 .retail-dialog button,

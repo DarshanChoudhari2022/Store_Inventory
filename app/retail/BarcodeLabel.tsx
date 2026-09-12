@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { cash, type Product } from "./domain";
+import { cash, productName, type Product } from "./domain";
 export default function BarcodeLabel({
   product,
   onClose,
@@ -46,10 +46,11 @@ export default function BarcodeLabel({
         </button>
       </div>
       <article className="retail-receipt" style={{ width: "50mm" }}>
-        <h3 id="barcode-title">{product.name}</h3>
+        <h3 id="barcode-title">{productName(product)}</h3>
         <p>
           {cash(product.default_selling_price)} / {product.unit}
         </p>
+        {product.mrp != null && <p>MRP {cash(product.mrp)}</p>}
         <svg
           ref={svg}
           style={{ width: "100%", height: "auto" }}

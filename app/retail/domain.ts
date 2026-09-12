@@ -11,7 +11,13 @@ export type Product = {
   hsn: string;
   tax_rate: number;
   expiry_date: string | null;
+  style_code?: string;
+  size?: string;
+  colour?: string;
+  mrp?: number | null;
+  is_active?: boolean;
 };
+export const productName = (p: Product) => [p.name,p.style_code,p.size,p.colour].filter(Boolean).join(' · ');
 export type Contact = {
   id: string;
   kind: "customer" | "supplier";

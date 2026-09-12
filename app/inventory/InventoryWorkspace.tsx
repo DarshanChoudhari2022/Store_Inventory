@@ -146,7 +146,7 @@ function ActionDialog({ action, data, lang, rpc, onClose, onSaved, onDelete }: {
     return () => element?.close();
   }, []);
   const change = (key: keyof ItemDraft, value: string | number) => setDraft(d => ({ ...d, [key]: value }));
-  async function submit(e: FormEvent) {
+  async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (lock.current) return;
     setError('');
@@ -163,7 +163,8 @@ function ActionDialog({ action, data, lang, rpc, onClose, onSaved, onDelete }: {
       } else if (action.type === 'stock') {
         await rpc('set_stock_checked', { p_item_id: itemId, p_stock: stockCount, p_expected_stock: selected!.stock });
       } else if (action.type === 'delete') {
-        await rpc('delete_item', { p_item_id: action.item!.id });
+        const result=await rpc('delete_item_confirmed', { p_item_id: action.item!.id, p_password:String(new FormData(e.currentTarget).get('password')||'') }) as {error?:string;deleted?:boolean};
+        if(result.error||!result.deleted)throw new Error(result.error||'Product was not deleted.');
       } else {
         const args = { p_name: draft.name.trim(), p_category: draft.category.trim(), p_buying_price: draft.buyingPrice, p_selling_price: draft.defaultSellingPrice, p_reorder_level: draft.reorderLevel };
         if (action.type === 'add') await rpc('add_item', { ...args, p_shop_id: data.shop.id, p_stock: draft.stock });
@@ -175,7 +176,7 @@ function ActionDialog({ action, data, lang, rpc, onClose, onSaved, onDelete }: {
       const known = /STOCK_CHANGED|INSUFFICIENT_STOCK|VALIDATION|PGRST202|Could not find the function/.test(detail);
       if (action.type === 'sale' && !known) setUncertain(true);
       if (action.type === 'sale' && known) { requestId.current = null; setUncertain(false); }
-      setError(detail.includes('STOCK_CHANGED') ? c.stale : detail.includes('INSUFFICIENT_STOCK') ? c.overStock : /PGRST202|Could not find the function/.test(detail) ? c.setup : action.type === 'sale' && !known ? c.uncertain : c.failed);
+      setError(action.type==='delete' ? detail : detail.includes('STOCK_CHANGED') ? c.stale : detail.includes('INSUFFICIENT_STOCK') ? c.overStock : /PGRST202|Could not find the function/.test(detail) ? c.setup : action.type === 'sale' && !known ? c.uncertain : c.failed);
     } finally { lock.current = false; setBusy(false); }
   }
   return <dialog ref={dialog} className="inventory-dialog" aria-labelledby="action-title" onCancel={e => { e.preventDefault(); if (!busy) onClose(); }}>
@@ -197,7 +198,7 @@ function ActionDialog({ action, data, lang, rpc, onClose, onSaved, onDelete }: {
           <div className="form-pair">{action.type === 'add' && <label>{c.stock}<VoiceInput required type="number" min="0" step="1" max="2147483647" value={draft.stock} onChange={e => change('stock', e.target.value === '' ? '' : Number(e.target.value))} /></label>}
           <label>{c.threshold}<VoiceInput required type="number" min="0" step="1" max="2147483647" value={draft.reorderLevel} onChange={e => change('reorderLevel', e.target.value === '' ? '' : Number(e.target.value))} /></label></div>
         </>}
-        {action.type === 'delete' && <><p className="delete-name">{action.item?.name}</p><p>{c.deleteHint}</p></>}
+        {action.type === 'delete' && <><p className="delete-name">{action.item?.name}</p><p>{c.deleteHint}</p><label>{lang==='mr'?'सध्याचा पासवर्ड':'Current password'}<input name="password" type="password" autoComplete="current-password" required /></label></>}
       </fieldset>
       {error && <p className="form-error" role="alert">{error}</p>}
       <footer>{action.type === 'edit' && <button className="danger-text" type="button" disabled={busy} onClick={() => onDelete(action.item!)}>{c.remove}</button>}

@@ -44,6 +44,10 @@ Ship retail workflows, migrations, security controls, offline queue, scheduler, 
 
 ### Phase 2 — team and hardware (next)
 
+Clothing catalogue and product controls are implemented: separate style/size/colour records, MRP, CSV entry, variant copying, an availability switch, password-confirmed deletion, deletion throttling and audit snapshots. Server checks also protect the legacy deletion and sales endpoints. See SHOP_QUICK_START.md for the operator workflow. Existing owner sessions require one fresh sign-in before deleting.
+
+Individual operator accounts are implemented with per-shop scope, super-admin creation/pause/reset, session revocation and personal password confirmation for deletion. Operator permissions currently match the shop operator: stock, billing, purchases and reports. Cashier-only permissions remain unimplemented. Login names are checked across owner, shop and staff identities to prevent account collisions.
+
 Add shop-scoped staff accounts, owner/cashier permissions, first-login reset, logo upload, and a printer adapter selected against confirmed Android, iPhone, Windows, and printer models. Keep browser printing as fallback.
 
 ### Phase 3 — finance and import
