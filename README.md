@@ -24,6 +24,7 @@ For Vercel, add the same two variables in Project Settings > Environment Variabl
 - [Design Doc](docs/DESIGN.md)
 - [Implementation Doc](docs/IMPLEMENTATION.md)
 - [Production Checklist](docs/PRODUCTION_CHECKLIST.md)
+- [Tech Stack Review](docs/TECH_STACK_REVIEW.md)
 
 ## Current Prototype
 
