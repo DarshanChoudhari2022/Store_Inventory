@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { cash, type Invoice } from "./domain";
-import { readAppearance } from './Appearance';
+import { playReceiptSound, readAppearance } from './Appearance';
 import { printEscPosBluetooth, receiptText } from "./thermal-printer";
 
 export default function Receipt({
@@ -17,10 +17,13 @@ export default function Receipt({
   useEffect(() => {
     const element = ref.current;
     element?.showModal();
-    const timer = readAppearance().autoPrint ? window.setTimeout(() => window.print(), 500) : undefined;
+    const appearance = readAppearance();
+    playReceiptSound();
+    const timer = appearance.autoPrint ? window.setTimeout(() => window.print(), 500) : undefined;
     return () => { if(timer)window.clearTimeout(timer); element?.close(); };
   }, []);
   const s = invoice.shop_snapshot.settings;
+  const appearance = readAppearance();
   useEffect(() => {
     if (s.upi && qr.current)
       void import("qrcode")
@@ -64,6 +67,10 @@ export default function Receipt({
         className="retail-receipt"
         style={{ maxWidth: s.paper === "58" ? "58mm" : "80mm" }}
       >
+        {appearance.receiptLogo && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img className="receipt-logo" src={appearance.receiptLogo} alt="" />
+        )}
         <h2 id="receipt-title">{invoice.shop_snapshot.name}</h2>
         <p>{s.address || invoice.shop_snapshot.area}</p>
         <p>{s.phone}</p>

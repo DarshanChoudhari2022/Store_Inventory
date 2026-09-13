@@ -498,6 +498,20 @@
 .retail-settings .primary {
   margin-top: 5px;
 }
+.retail-logo-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.retail-logo-preview img {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+  border: 1px solid #dce5df;
+  background: #fff;
+  padding: 6px;
+}
 .retail-error,
 .retail-warning,
 .retail-notice {
@@ -582,6 +596,13 @@
 .retail-receipt h2 {
   text-align: center;
   font-size: 21px;
+}
+.receipt-logo {
+  display: block;
+  max-width: 42mm;
+  max-height: 18mm;
+  object-fit: contain;
+  margin: 0 auto 8px;
 }
 .retail-receipt h3 {
   font-size: 15px;

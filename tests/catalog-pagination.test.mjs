@@ -43,8 +43,11 @@ test('catalogue pages search across all records and preserve sales selectors and
   await assert.rejects(page('products',0,'',false,outsider.token),/Shop access/);
   await assert.rejects(page('products',-1),/Invalid catalogue/);
   await assert.rejects(page('products',0,'x'.repeat(201)),/Invalid catalogue/);
-  assert.equal((await page('sell')).products.length,61);
+  assert.equal((await page('sell')).products.length,50);
   assert.equal((await page('sell')).contacts.length,62);
+  const lookup=await call('retail_product_lookup',owner.token,shop.id,'code60',50);
+  assert.equal(lookup.length,1);
+  assert.equal(lookup[0].barcode,'code60');
   const exportPage=await call('retail_report_export_page',owner.token,shop.id,'2026-09-01','2026-09-30',0,50);
   assert.equal(exportPage.invoices.length,0);assert.equal(exportPage.hasMore,false);
   assert.equal((await call('retail_workspace_scoped',owner.token,shop.id,'2026-09-01','2026-09-30','products',0)).products.length,50);

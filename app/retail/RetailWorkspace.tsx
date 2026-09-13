@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useEffectEvent,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -118,6 +119,7 @@ export default function RetailWorkspace({
     [to, setTo] = useState(today());
   const [query, setQuery] = useState(""),
     [lookupProducts, setLookupProducts] = useState<Product[]>([]),
+    [productCache, setProductCache] = useState<Product[]>([]),
     [category, setCategory] = useState(""),
     [low, setLow] = useState(false),
     [aging, setAging] = useState<Record<string, number> | null>(null),
@@ -180,6 +182,17 @@ export default function RetailWorkspace({
       alive = false;
       window.removeEventListener("online", change);
       window.removeEventListener("offline", change);
+    };
+  }, [namespace]);
+  useEffect(() => {
+    let alive = true;
+    void readLocal<Product[]>(namespace + ":product-cache")
+      .then((products) => {
+        if (alive && Array.isArray(products)) setProductCache(products);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
     };
   }, [namespace]);
   useEffect(() => {
@@ -439,6 +452,54 @@ export default function RetailWorkspace({
     setCurrentCart = purchasing ? setPurchaseCart : setCart;
   const total = currentCart.reduce((n, l) => n + lineTotal(l), 0);
   const pageSize = 50;
+  const rememberProducts = useCallback(
+    (products: Product[]) => {
+      if (!products.length) return;
+      setProductCache((current) => {
+        const merged = new Map<string, Product>();
+        for (const product of [...products, ...current]) merged.set(product.id, product);
+        const next = [...merged.values()].slice(0, 200);
+        void writeLocal(namespace + ":product-cache", next).catch(() => {});
+        return next;
+      });
+    },
+    [namespace],
+  );
+  const productsById = useMemo(() => {
+    const map = new Map<string, Product>();
+    for (const product of productCache) map.set(product.id, product);
+    for (const product of data?.products || []) map.set(product.id, product);
+    for (const product of lookupProducts) map.set(product.id, product);
+    return map;
+  }, [data?.products, lookupProducts, productCache]);
+  const searchProducts = useCallback(
+    async (value: string) => {
+      const term = value.trim();
+      if (!term) return data?.products.filter((p) => p.is_active !== false) || [];
+      if (offline) {
+        const lower = term.toLowerCase();
+        const merged = new Map<string, Product>();
+        for (const product of data?.products || []) merged.set(product.id, product);
+        for (const product of productCache) merged.set(product.id, product);
+        return [...merged.values()]
+          .filter(
+            (p) =>
+              p.is_active !== false &&
+              `${productName(p)} ${p.barcode} ${p.category}`.toLowerCase().includes(lower),
+          )
+          .slice(0, 50);
+      }
+      const found =
+        ((await rpcRef.current("retail_product_lookup", {
+          p_shop_id: shopId,
+          p_query: term,
+          p_limit: 50,
+        })) as Product[]) || [];
+      rememberProducts(found);
+      return found;
+    },
+    [data?.products, offline, productCache, rememberProducts, shopId],
+  );
   const pageOf = <T,>(key: string, rows: T[]) => {
     if (data?.pageTotals && ['products','contacts'].includes(key)) {
       return data.pageView===view && data.catalogOffset===catalogOffset && data.catalogQuery===catalogQuery && data.catalogLow===catalogLow ? rows : [];
@@ -452,6 +513,7 @@ export default function RetailWorkspace({
   const availableStock = (product: Product) => Math.max(0, product.stock - (offline ? pending.filter(sale => !sale.rejection).reduce((qty, sale) => qty + ((sale.data.lines as CartLine[]) || []).filter(line => line.id === product.id).reduce((n,line) => n + line.qty, 0), 0) : 0));
   const add = (p: Product) =>
     setCurrentCart((prev) => {
+      rememberProducts([p]);
       const existing = prev.find((l) => l.id === p.id);
       return existing
         ? prev.map((l) =>
@@ -481,7 +543,7 @@ export default function RetailWorkspace({
     const amountPaid = method === 'split' ? Math.round(Object.values(split).reduce((n,v)=>n+Number(v||0),0)*100)/100 : method === 'credit' ? 0 : method === 'cash' ? Math.min(Math.round(total*100)/100,enteredPaid) : enteredPaid;
     if (!currentCart.length || currentCart.some(line => !Number.isFinite(line.qty) || line.qty <= 0 || !Number.isFinite(line.price) || line.price < 0 || line.discount < 0 || line.discount > 100)) { setError('Check every quantity, price and discount before saving.'); return; }
     if (!Number.isFinite(amountPaid) || amountPaid < 0 || amountPaid > Math.round(total*100)/100 || (amountPaid < Math.round(total*100)/100 && !contactId)) { setError('Choose a customer for credit and enter an amount between zero and the bill total.'); return; }
-    if (!purchasing && currentCart.some(line => { const p = data?.products.find(product => product.id === line.id); return !p || line.qty > availableStock(p) || (['pcs','pack'].includes(p.unit) && !Number.isInteger(line.qty)); })) { setError('Check available stock and quantities. Pending offline bills reserve stock on this device.'); return; }
+    if (!purchasing && currentCart.some(line => { const p = productsById.get(line.id); return !p || line.qty > availableStock(p) || (['pcs','pack'].includes(p.unit) && !Number.isInteger(line.qty)); })) { setError('Check available stock and quantities. Pending offline bills reserve stock on this device.'); return; }
     const result = await perform(purchasing ? "purchase" : "checkout", {
       lines: currentCart,
       contactId,
@@ -526,9 +588,9 @@ export default function RetailWorkspace({
           .toLowerCase()
           .includes(query.trim().toLowerCase()),
     )) || [];
-  const scanSubmit = (e: FormEvent) => {
+  const scanSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    const p = data?.products.find((p) => p.barcode === query.trim() && p.is_active!==false);
+    const p = (await searchProducts(query)).find((p) => p.barcode === query.trim() && p.is_active!==false);
     if (p) {
       add(p);
       setQuery("");
@@ -542,16 +604,16 @@ export default function RetailWorkspace({
   };
   const summary = data ? data.summary ?? report(data) : null;
   useEffect(() => {
-    if (view !== 'sell' || !query.trim() || offline) return;
+    if (view !== 'sell' || !query.trim()) return;
     let active = true;
     const timer = window.setTimeout(() => {
       setLookupProducts([]);
-      void rpc('retail_product_lookup', {p_shop_id: shopId, p_query: query.trim(), p_limit: 50})
-        .then(value => { if (active) setLookupProducts((value as Product[]) || []); })
+      void searchProducts(query)
+        .then(value => { if (active) setLookupProducts(value); })
         .catch(() => { if (active) setLookupProducts([]); });
     }, 180);
     return () => { active = false; window.clearTimeout(timer); };
-  }, [query, view, offline, rpc, shopId]);
+  }, [query, view, offline, searchProducts]);
   useEffect(() => {
     if (!selectedContact || view !== 'customers' || offline) return;
     let active = true;
@@ -927,7 +989,7 @@ export default function RetailWorkspace({
                   </Empty>
                 ) : (
                   currentCart.map((l) => {
-                    const p = data.products.find((p) => p.id === l.id);
+                    const p = productsById.get(l.id);
                     return (
                       <div className="retail-cart-line" key={l.id}>
                         <div>
@@ -1642,8 +1704,8 @@ export default function RetailWorkspace({
       {scan && (
         <ScanBarcode
           onClose={() => setScan(false)}
-          onFound={(code) => {
-            const p = data.products.find((p) => p.barcode === code && p.is_active!==false);
+          onFound={async (code) => {
+            const p = (await searchProducts(code)).find((p) => p.barcode === code && p.is_active!==false);
             if (p) {
               add(p);
               setNotice(`Added ${p.name}`);

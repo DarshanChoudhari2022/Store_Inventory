@@ -73,7 +73,7 @@ The retail migration was applied to Supabase and the RPC endpoint became availab
 
 September 12 voice follow-up: reusable voice inputs now cover editable text/numeric/date fields, search, super-admin shop forms, legacy inventory forms, and OCR review text. Passwords, file inputs, checkboxes, and selectors retain their native controls. Dictation uses the selected app language (English/Marathi), permits one active microphone, stops on unmount, preserves selected text, validates field limits, and surfaces errors. Browser providers may process speech online; this is not guaranteed local transcription. Ambiguous amounts require manual correction and dates require YYYY-MM-DD. Transcription is never an instruction to save a form or post a bill.
 
-Validation: 37 automated tests pass; production build and lint pass. Desktop and narrow-screen product forms were inspected. Actual speech accuracy/permissions need testing with the user's microphone and supported browser. Camera scanning, OCR accuracy, physical receipt/label printers, and complete production offline reload/reconciliation still need device-level acceptance. Offline bills require manual sync; recurring templates require manual generation. Full background scheduling, appearance preferences, complete Marathi translation, batch-level expiry tracking, and granular staff roles remain pending. Restaurant workflows remain excluded. GST filing and e-invoice submission are not implemented.
+Validation: 49 automated tests pass; production build, typecheck and lint pass. Desktop and narrow-screen product forms were inspected. Actual speech accuracy/permissions need testing with the user's microphone and supported browser. Camera scanning, OCR accuracy, physical receipt/label printers, and complete production offline reload/reconciliation still need device-level acceptance. Full Marathi translation, batch-level expiry tracking, certified accounting books, USB/serial printer adapters, direct GSTN filing and e-invoice submission are not implemented. Restaurant workflows remain excluded. 
 
 
 ### September 12 production hardening
@@ -83,3 +83,7 @@ Automatic reconnect sync, full checkout draft details, pending-request recovery 
 The preceding manual-sync/manual-scheduler status is superseded by this update. See PRODUCTION_CHECKLIST.md for release acceptance and remaining feature limits. Complete Dhando parity is not claimed.
 
 Browser acceptance in the isolated SQL fixture also confirmed cart/tender persistence across reload, cash change and receipt totals, stock decrement, server-unreachable cached reload, and durable queued checkout during an API outage. This development-server check does not certify the production service-worker shell or physical devices.
+
+### September 13 performance hardening
+
+The Sell screen no longer loads the full product catalogue. It opens with a bounded 50-product active catalogue, uses server-side name/barcode lookup for all counter search, and keeps a 200-product recent local cache so cart lines and short offline searches stay usable. Receipt customization now includes device-level logo preview/printing and an optional saved-bill sound.

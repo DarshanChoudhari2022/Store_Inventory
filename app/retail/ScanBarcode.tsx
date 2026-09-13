@@ -4,7 +4,7 @@ export default function ScanBarcode({
   onFound,
   onClose,
 }: {
-  onFound: (code: string) => void;
+  onFound: (code: string) => void | Promise<void>;
   onClose: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null),
@@ -31,7 +31,9 @@ export default function ScanBarcode({
             if (result && alive) {
               alive = false;
               controls.stop();
-              foundRef.current(result.getText());
+              void Promise.resolve(foundRef.current(result.getText())).catch((e) => {
+                setError(e instanceof Error ? e.message : "Could not use scanned barcode.");
+              });
             }
           },
         );
