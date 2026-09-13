@@ -159,9 +159,9 @@ export default function LandingPage({
         </nav>
         <div className="lp-nav-actions">
           {languageToggle}
-          <AnimatedButton onClick={login} className="lp-nav-login">
+          <AnimatedLink href="/login" className="lp-nav-login">
             {t("Sign in", "लॉगिन")} <ArrowUpRight size={17} />
-          </AnimatedButton>
+          </AnimatedLink>
         </div>
       </header>
 
@@ -693,7 +693,7 @@ export default function LandingPage({
             )}
           </div>
         </Reveal>
-        <Reveal className="lp-login-wrap">{children}</Reveal>
+        <Reveal className="lp-login-wrap"><AnimatedLink href="/login" className="lp-access-cta">Open your workspace <ArrowRight size={18}/></AnimatedLink></Reveal>
       </section>
       <footer className="lp-footer lp-container">
         <span className="lp-footer-brand">
@@ -715,4 +715,4 @@ export default function LandingPage({
       </footer>
     </main>
   );
-}
+}  const login = () => { window.location.href = "/login"; };
