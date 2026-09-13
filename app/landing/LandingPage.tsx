@@ -22,7 +22,7 @@ import {
   WifiOff,
   WalletCards,
 } from "lucide-react";
-import { AnimatedButton, AnimatedLink, Reveal } from "./Motion";
+import { AnimatedLink, Reveal } from "./Motion";
 import "./landing.css";
 
 type Lang = "en" | "mr";
@@ -35,21 +35,12 @@ export default function LandingPage({
   languageToggle: ReactNode;
   children: ReactNode;
 }) {
+  void children;
   const mr = lang === "mr";
   const t = (en: string, marathi: string) => (mr ? marathi : en);
   const [preview, setPreview] = useState<"inventory" | "sales" | "closing">(
     "inventory",
   );
-  const login = () => {
-    document
-      .getElementById("access")
-      ?.scrollIntoView({
-        behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
-          ? "instant"
-          : "smooth",
-      });
-    document.getElementById("username")?.focus({ preventScroll: true });
-  };
   const features = [
     {
       icon: Package,
@@ -187,10 +178,10 @@ export default function LandingPage({
             )}
           </p>
           <div className="lp-hero-actions">
-            <AnimatedButton onClick={login}>
+            <AnimatedLink href="/login">
               {t("Open your store", "तुमचे दुकान उघडा")}
               <ArrowUpRight size={19} />
-            </AnimatedButton>
+            </AnimatedLink>
             <AnimatedLink href="#preview">
               {t("Take a closer look", "जवळून पाहा")}
               <ArrowRight size={17} />
@@ -715,4 +706,4 @@ export default function LandingPage({
       </footer>
     </main>
   );
-}  const login = () => { window.location.href = "/login"; };
+}
