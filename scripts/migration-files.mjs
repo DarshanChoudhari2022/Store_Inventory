@@ -24,4 +24,5 @@ export const migrationFiles = [
   'migrations/20261001_report_export_pages.sql',
   'migrations/20261002_customer_aging.sql',
   'migrations/20261003_product_lookup.sql',
+  'migrations/20261004_migration_checksums.sql',
 ];

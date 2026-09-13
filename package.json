@@ -14,7 +14,8 @@
     "setup:supabase": "node scripts/setup-supabase.mjs",
     "typecheck": "next typegen && tsc --noEmit",
     "migrate:retail": "node scripts/migrate-retail.mjs",
-    "verify:live": "node scripts/verify-live-retail.mjs"
+    "verify:live": "node scripts/verify-live-retail.mjs",
+    "verify:migrations": "node scripts/verify-migration-drift.mjs"
     ,"backup:db": "node scripts/backup-database.mjs"
     ,"restore:db": "node scripts/restore-database.mjs"
   },
