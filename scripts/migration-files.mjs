@@ -20,4 +20,5 @@ export const migrationFiles = [
   'migrations/20260927_contact_credit.sql',
   'migrations/20260928_split_tender.sql',
   'migrations/20260929_held_bills.sql',
+  'migrations/20260930_catalog_pagination.sql',
 ];

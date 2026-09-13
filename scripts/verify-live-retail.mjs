@@ -56,12 +56,21 @@ try {
  assert.match((await call('delete_item_confirmed',[sessionA.token,removable.id,'wrong'])).error,/Incorrect password/);
  assert.equal((await call('delete_item_confirmed',[sessionA.token,removable.id,password])).deleted,true);
  assert.match((await call('delete_item_confirmed',[sessionA.token,product.id,password])).error,/bill history/);
+ await client.query("insert into items(shop_id,name,category,buying_price,default_selling_price,stock,reorder_level) select $1,'Page check '||lpad(n::text,3,'0'),'Test',1,2,3,1 from generate_series(1,55) n",[a.id]);
+ const productPage=await call('retail_workspace_scoped',[sessionA.token,a.id,day,day,'products',0,50,'',false]);
+ assert.equal(productPage.products.length,6);assert.equal(productPage.pageTotals.products,56);
+ const searchPage=await call('retail_workspace_scoped',[sessionA.token,a.id,day,day,'products',0,0,'Page check 055',false]);
+ assert.equal(searchPage.products.length,1);assert.equal(searchPage.pageTotals.products,1);
+ const contactPage=await call('retail_workspace_scoped',[sessionA.token,a.id,day,day,'customers',0,0,'Verification customer',false]);
+ assert.equal(contactPage.contacts.length,1);assert.equal(contactPage.pageTotals.contacts,1);
  await client.query('rollback');
  assert.equal((await client.query('select count(*)::int n from owner_accounts where username=$1',[username])).rows[0].n,0);
  console.log('Live verification passed: super-admin creates independent shops, both logins work, checkout retries save once, stock and credit reconcile, cross-shop access is denied. All verification records rolled back.');
+ console.log('Product and contact pagination/search passed.');
  console.log('Daily report totals, scoped history and credit-limit rejection also passed.');
  console.log('Held-bill checkout, split tender, retry identity and cash allocation passed.');
  const cron=await client.query("select active from cron.job where jobname='storestock-recurring-bills'");
  assert.equal(cron.rows[0]?.active,true);console.log('Recurring scheduler is registered and active.');
 } catch(e) {await client.query('rollback').catch(()=>{});console.error(e.message);process.exitCode=1;}
 finally {await client.end();}
+

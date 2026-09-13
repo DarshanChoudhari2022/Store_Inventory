@@ -84,6 +84,9 @@ export type Purchase = {
   created_at: string;
 };
 export type Workspace = {
+  catalogOffset?:number;
+  catalogQuery?:string;
+  catalogLow?:boolean;
   pageOffset?:number;
   pageView?:string;
   pageTotals?:Record<string,number>;

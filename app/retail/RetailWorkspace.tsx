@@ -184,6 +184,15 @@ export default function RetailWorkspace({
     rpcRef.current = rpc;
   }, [rpc]);
   const historyOffset = (pages[view==='bills'?'invoices':'movements'] || 0)*50;
+  const catalogView = ['products','customers','suppliers'].includes(view);
+  const catalogOffset = catalogView ? (pages[view==='products'?'products':'contacts'] || 0)*50 : 0;
+  const catalogQuery = catalogView ? query.trim() : '';
+  const catalogLow = view==='products' && low;
+  const changeQuery = (value: string) => {
+    setQuery(value.slice(0,200));
+    setPages(current => ({...current, products:0, contacts:0}));
+    setSelectedContact('');
+  };
   const workspaceKey = `${namespace}:workspace:${view}`;
   const reload = useCallback(async () => {
     const n = ++generation.current;
@@ -191,7 +200,7 @@ export default function RetailWorkspace({
       const cached = await readLocal<{ value: Workspace; at: number; from:string; to:string }>(
         workspaceKey,
       );
-      if (cached && Date.now() - cached.at < 12 * 60 * 60 * 1000 && (view==='sell' || (cached.from===from && cached.to===to && cached.value.pageOffset===historyOffset))) {
+      if (cached && Date.now() - cached.at < 12 * 60 * 60 * 1000 && (view==='sell' || (cached.from===from && cached.to===to && cached.value.pageOffset===historyOffset && cached.value.catalogOffset===catalogOffset && cached.value.catalogQuery===catalogQuery && cached.value.catalogLow===catalogLow))) {
         if (n === generation.current) { setData(cached.value); setOffline(true); }
         return;
       }
@@ -207,8 +216,9 @@ export default function RetailWorkspace({
       p_to: to,
       p_view:view,
       p_offset:historyOffset,
+      p_catalog_offset:catalogOffset, p_query:catalogQuery, p_low:catalogLow,
     })) as Workspace;
-      if(staffRole!=='cashier')w.summary=await rpcRef.current("retail_report",{p_shop_id:shopId,p_from:from,p_to:to}) as NonNullable<Workspace["summary"]>;
+      if(staffRole!=='cashier' && ['cash','reports'].includes(view))w.summary=await rpcRef.current("retail_report",{p_shop_id:shopId,p_from:from,p_to:to}) as NonNullable<Workspace["summary"]>;
     } catch (error) {
       if (isNetworkFailure(error)) return restoreWorkspace();
       throw error;
@@ -217,6 +227,13 @@ export default function RetailWorkspace({
       await recoverShopPending(shopId, namespace);
       setPending(await listLocal<PendingSale>(namespace + ':sale:'));
       if (n !== generation.current) return;
+      const catalogKey = view==='products' ? 'products' : 'contacts';
+      const total = w.pageTotals?.[catalogKey];
+      if (catalogView && total!==undefined && catalogOffset>0 && catalogOffset>=total) {
+        setPages(current=>({...current,[catalogKey]:Math.max(0,Math.ceil(total/50)-1)}));
+        setSelectedContact('');
+        return;
+      }
       setOffline(false);
       setData(w);
       void writeLocal(workspaceKey, {
@@ -225,7 +242,7 @@ export default function RetailWorkspace({
         at: Date.now(),
       }).catch(() => {});
     }
-  }, [shopId, from, to, namespace,staffRole,view,historyOffset,workspaceKey]);
+  }, [shopId, from, to, namespace,staffRole,view,historyOffset,workspaceKey,catalogOffset,catalogQuery,catalogLow,catalogView]);
   useEffect(() => {
     let alive = true;
     const counter = generation;
@@ -406,8 +423,16 @@ export default function RetailWorkspace({
     setCurrentCart = purchasing ? setPurchaseCart : setCart;
   const total = currentCart.reduce((n, l) => n + lineTotal(l), 0);
   const pageSize = 50;
-  const pageOf = <T,>(key: string, rows: T[]) => ["invoices","movements"].includes(key) && data?.pageTotals ? (data.pageOffset===(pages[key]||0)*pageSize && data.pageView===view ? rows : []) : rows.slice((pages[key] || 0) * pageSize, ((pages[key] || 0) + 1) * pageSize);
-  const pager = (key: string, totalRows: number) => <Pagination page={pages[key] || 0} pages={Math.max(1, Math.ceil((data?.pageTotals?.[key] ?? totalRows) / pageSize))} onChange={(next) => setPages(current => ({...current, [key]: next}))} />;
+  const pageOf = <T,>(key: string, rows: T[]) => {
+    if (data?.pageTotals && ['products','contacts'].includes(key)) {
+      return data.pageView===view && data.catalogOffset===catalogOffset && data.catalogQuery===catalogQuery && data.catalogLow===catalogLow ? rows : [];
+    }
+    if (data?.pageTotals && ['invoices','movements'].includes(key)) {
+      return data.pageOffset===(pages[key]||0)*pageSize && data.pageView===view ? rows : [];
+    }
+    return rows.slice((pages[key]||0)*pageSize, ((pages[key]||0)+1)*pageSize);
+  };
+  const pager = (key: string, totalRows: number) => <Pagination page={pages[key] || 0} pages={Math.max(1, Math.ceil((data?.pageTotals?.[key] ?? totalRows) / pageSize))} onChange={(next) => {setPages(current => ({...current, [key]: next})); if(key==='contacts')setSelectedContact('');}} />;
   const availableStock = (product: Product) => Math.max(0, product.stock - (offline ? pending.filter(sale => !sale.rejection).reduce((qty, sale) => qty + ((sale.data.lines as CartLine[]) || []).filter(line => line.id === product.id).reduce((n,line) => n + line.qty, 0), 0) : 0));
   const add = (p: Product) =>
     setCurrentCart((prev) => {
@@ -476,15 +501,15 @@ export default function RetailWorkspace({
     setError("");
   };
   const rows =
-    data?.products.filter(
+    (view==='products' ? data?.products : data?.products.filter(
       (p) =>
-        (view === 'products' || p.is_active !== false) &&
+        p.is_active !== false &&
         (!category || p.category === category) &&
         (!low || p.stock <= p.reorder_level) &&
         `${productName(p)} ${p.barcode} ${p.category}`
           .toLowerCase()
-          .includes(query.toLowerCase()),
-    ) || [];
+          .includes(query.trim().toLowerCase()),
+    )) || [];
   const scanSubmit = (e: FormEvent) => {
     e.preventDefault();
     const p = data?.products.find((p) => p.barcode === query.trim() && p.is_active!==false);
@@ -748,7 +773,7 @@ export default function RetailWorkspace({
                       "नाव किंवा बारकोड शोधा…",
                     )}
                     value={query}
-                    onChange={(e) => setQuery(e.target.value)}
+                    onChange={(e) => changeQuery(e.target.value)}
                   />
                   <button title="Add scanned barcode">
                     <Barcode size={20} />
@@ -1057,13 +1082,13 @@ export default function RetailWorkspace({
                 aria-label="Search products"
                 placeholder={t("Search products", "उत्पादने शोधा")}
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => changeQuery(e.target.value)}
               />
               <label className="retail-check">
                 <VoiceInput
                   type="checkbox"
                   checked={low}
-                  onChange={(e) => setLow(e.target.checked)}
+                  onChange={(e) => {setLow(e.target.checked); setPages(current=>({...current,products:0}));}}
                 />
                 {t("Low stock", "कमी साठा")}
               </label>
@@ -1215,7 +1240,7 @@ export default function RetailWorkspace({
               <VoiceInput
                 placeholder={t("Search name or phone", "नाव किंवा फोन शोधा")}
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => changeQuery(e.target.value)}
               />
               <button
                 className="primary"
@@ -1240,7 +1265,7 @@ export default function RetailWorkspace({
                       (view === "customers" ? "customer" : "supplier") &&
                     `${c.name} ${c.phone}`
                       .toLowerCase()
-                      .includes(query.toLowerCase()),
+                      .includes(query.trim().toLowerCase()),
                 )
                 ) .map((c) => [
                   c.name,
@@ -1262,7 +1287,7 @@ export default function RetailWorkspace({
                   </div>,
                 ])}
             />
-            {pager("contacts", data.contacts.filter(c => c.kind === (view === "customers" ? "customer" : "supplier") && `${c.name} ${c.phone}`.toLowerCase().includes(query.toLowerCase())).length)}
+            {pager("contacts", data.contacts.filter(c => c.kind === (view === "customers" ? "customer" : "supplier") && `${c.name} ${c.phone}`.toLowerCase().includes(query.trim().toLowerCase())).length)}
             {selectedContact && (
               <section className="retail-panel">
                 <h3>

@@ -92,3 +92,14 @@ Still open: product/contact server pagination, dedicated lazy report screens and
 Validation: 45 automated tests pass with additional split allocation, malformed payment, held version, retry and double-checkout cases. Lint, typecheck/build and HTTP security checks passed. Browser verification completed hold → resume → Cash + UPI checkout and verified the receipt amounts. Supabase migrations are applied; rolled-back live checks verify held checkout, cash allocation and retry identity alongside the earlier multi-shop tests.
 
 Open work remains as listed in the second pass, except split tender and held bills are now implemented for the main Sell workflow. Quotation conversion still uses its existing single-tender form. Real concurrent-client, offline eviction, printer hardware and hosted load/recovery acceptance remain required before production replacement claims.
+
+
+## Catalogue pagination implementation pass
+
+Completed product, customer and supplier management pagination with 50 rows per request. Searches run in PostgreSQL across the entire shop, including product style, size, colour and barcode; low-stock filtering and matching totals use the same predicates. Search/filter changes reset the page, and deleting the last record on a page returns to a valid page. Cached management pages are used only when search, filters, dates and offsets match.
+
+The sales catalogue and selector views still load complete product/contact lists for barcode lookup and offline carts. This step bounds the management lists; it does not eliminate every large payload. Customer statements still fetch selected-range history, and scalable selector lookup/offline catalogue synchronization remains future work. Offset pages can shift when another operator inserts or deletes records between requests.
+
+Validation: full migration-chain tests cover 61 products and customers, page boundaries, repeatable ordering, later-page search, literal percent search, low-stock threshold equality, cashier cost redaction, supplier restrictions, tenant isolation, legacy RPC arguments and migration replay. Live checks use temporary verification shops inside a rolled-back transaction.
+
+Next sequential item: isolate and lazy-load the reports interface, then address large exports. The remaining roadmap and operational acceptance gates above are still open; full Dhando retail parity is not claimed.
