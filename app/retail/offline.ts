@@ -12,6 +12,27 @@ export type PendingSale = {
   rejection?: string;
 };
 const DB = "storestock-offline-v1";
+// Upgrade old cache keys that included bearer tokens, preserving every draft
+// and unsynced request. These opaque namespaces confer no server access.
+export async function removeLegacyTokenKeys() {
+  const db = await open();
+  try {
+    const keys = await new Promise<IDBValidKey[]>((resolve,reject)=>{
+      const request=db.transaction('records','readonly').objectStore('records').getAllKeys();
+      request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);
+    });
+    const prefixes=[...new Set(keys.map(String).map(key=>key.split(':')[0]).filter(key=>/^[a-f0-9-]{36}$/i.test(key)))];
+    for(const prefix of prefixes){
+      const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('legacy-cache:'+prefix));
+      const replacement='legacy-'+Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,'0')).join('');
+      await new Promise<void>((resolve,reject)=>{
+        const tx=db.transaction('records','readwrite'),store=tx.objectStore('records'),request=store.openCursor();
+        request.onsuccess=()=>{const cursor=request.result;if(!cursor)return;const key=String(cursor.key);if(key.startsWith(prefix+':')){store.put(cursor.value,replacement+key.slice(prefix.length));cursor.delete();}cursor.continue();};
+        tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);
+      });
+    }
+  } finally {db.close();}
+}
 function open(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const r = indexedDB.open(DB, 1);

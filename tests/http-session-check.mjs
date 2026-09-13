@@ -1,0 +1,23 @@
+// Run against the local SQL fixture and Next server on port 3012.
+import assert from 'node:assert/strict';
+const base='http://localhost:3012';
+const post=(path,body,cookie='',origin=base)=>fetch(base+path,{method:'POST',headers:{origin,'content-type':'application/json',cookie},body:JSON.stringify(body)});
+const credentials={username:'test-owner',password:'local-test-password'};
+assert.equal((await post('/api/session',credentials,'','https://untrusted.example')).status,403);
+const login=await post('/api/session',credentials);assert.equal(login.status,200);
+const profile=await login.json(),header=login.headers.get('set-cookie'),cookie=header.split(';')[0];
+assert.ok(/httponly/i.test(header));assert.ok(/samesite=strict/i.test(header));
+assert.equal(profile.token,undefined);assert.match(profile.cacheId,/^[a-f0-9]{64}$/);
+const body={name:'list_shops',args:{},cacheId:profile.cacheId};
+assert.equal((await post('/api/rpc',body)).status,401);
+assert.equal((await post('/api/rpc',{...body,cacheId:'wrong-tab'},cookie)).status,401);
+assert.equal((await post('/api/rpc',body,cookie,'https://untrusted.example')).status,403);
+assert.equal((await post('/api/rpc',{...body,name:'retail_run_schedules'},cookie)).status,400);
+assert.equal((await post('/api/rpc',{...body,padding:'x'.repeat(1_000_001)},cookie)).status,400);
+const shops=await (await post('/api/rpc',body,cookie)).json();assert.equal(shops.data.length,2);
+assert.equal((await post('/api/rpc',{...body,args:{p_token:'not-a-real-token'}},cookie)).status,200);
+const get=await fetch(base+'/api/session',{headers:{cookie}});assert.equal(get.status,200);assert.equal((await get.json()).token,undefined);
+const logout=await fetch(base+'/api/session',{method:'DELETE',headers:{cookie,origin:base}});assert.equal(logout.status,200);
+assert.equal((await post('/api/rpc',body,cookie)).status,401);
+assert.equal((await fetch(base+'/api/session',{headers:{cookie}})).status,401);
+console.log('HTTP session checks passed: token-free responses, HttpOnly cookie, origin checks, RPC allowlist, tab binding and server revocation.');

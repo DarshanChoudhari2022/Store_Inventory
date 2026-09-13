@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {isNetworkFailure,readLocal,writeLocal,listLocal,removeLocal,recoverShopPending,clearLocalSession} from '../app/retail/offline.ts';
+import {isNetworkFailure,readLocal,writeLocal,listLocal,removeLocal,recoverShopPending,clearLocalSession,removeLegacyTokenKeys} from '../app/retail/offline.ts';
 test('offline bills retain request identity across reauthentication and stay shop isolated',async()=>{
  const a={id:crypto.randomUUID(),shopId:'a',created:new Date().toISOString(),data:{lines:[{id:'tea',qty:2,price:10}],paid:5,contactId:'customer'}};
  const b={...a,id:crypto.randomUUID(),shopId:'b'};
@@ -20,4 +20,16 @@ test('offline bills retain request identity across reauthentication and stay sho
 test('network fallback never masks authentication or database validation failures',()=>{
  for(const error of [new TypeError('Failed to fetch'),{message:'TypeError: NetworkError when attempting to fetch resource.'},new Error('Load failed'),{status:502,code:'',message:'Bad gateway'}]) assert.equal(isNetworkFailure(error),true);
  for(const error of [null,{message:'Shop access denied',code:'P0001'},new Error('Session expired'),new Error('Insufficient stock'),{status:500,code:'XX000',message:'Database error'}]) assert.equal(isNetworkFailure(error),false);
+});
+
+test('cookie-session upgrade removes bearer cache keys without losing pending requests',async()=>{
+ const old=crypto.randomUUID(),shop=crypto.randomUUID(),id=crypto.randomUUID();
+ const pending={id,shopId:shop,created:new Date().toISOString(),data:{lines:[{id:'tea',qty:1,price:10}]}};
+ await writeLocal(`${old}:${shop}:sale:${id}`,pending);
+ await writeLocal(`${old}:${shop}:cart`,{cart:pending.data.lines});
+ await removeLegacyTokenKeys();
+ assert.deepEqual(await listLocal(old+':'),[]);
+ const preserved=await listLocal('legacy-');assert.ok(preserved.some(row=>row.id===id));
+ await recoverShopPending(shop,'safe-cache:'+shop);
+ assert.deepEqual(await listLocal(`safe-cache:${shop}:sale:`),[pending]);
 });

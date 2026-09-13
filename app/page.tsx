@@ -1,13 +1,13 @@
 'use client';
 
-import { createClient } from '@supabase/supabase-js';
+import { retailRpc } from './retail/rpc-client';
 import { FormEvent, memo, useEffect, useEffectEvent, useRef, useState } from 'react';
 import RetailWorkspace from './retail/RetailWorkspace';
-import StaffManagement from './retail/StaffManagement';
+import StaffManagement, {type Staff} from './retail/StaffManagement';
 import InventoryWorkspace from './inventory/InventoryWorkspace';
 import VoiceInput from './retail/VoiceInput';
 import { AppearanceBootstrap } from './retail/Appearance';
-import { readLocal, writeLocal, clearLocalSession, listLocal, isNetworkFailure } from './retail/offline';
+import { readLocal, writeLocal, clearLocalSession, listLocal, isNetworkFailure, removeLegacyTokenKeys } from './retail/offline';
 import LandingPage from './landing/LandingPage';
 import { money } from './inventory/domain';
 
@@ -62,7 +62,7 @@ type OwnerSummary = {
 };
 
 type Session = {
-  token: string;
+  cacheId: string;
   role: 'owner' | 'shop';
   shopId?: string;
   staffRole?: 'cashier' | 'manager';
@@ -300,11 +300,9 @@ const dictionary = {
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
-const supabase = isSupabaseConfigured
-  ? createClient(supabaseUrl as string, supabaseAnonKey as string)
-  : null;
+const supabase = isSupabaseConfigured ? {rpc:retailRpc} : null;
 
-const sessionKey = 'store-inventory-session-v1';
+const sessionKey = 'store-inventory-session-v2';
 
 const cleanSlug = (value: string) =>
   value
@@ -344,10 +342,10 @@ function mapSale(raw: Record<string, unknown>): Sale {
   };
 }
 
-function getRpcData<T>(data: T | null, error: { message?: string } | null) {
+function getRpcData<T>(data: unknown, error: { message?: string } | null): T {
   if (error) throw new Error(error.message || 'Supabase request failed');
   if (data === null) throw new Error('Supabase returned no data');
-  return data;
+  return data as T;
 }
 
 function getSupabaseClient() {
@@ -380,31 +378,42 @@ export default function Home() {
   useEffect(() => { document.documentElement.lang = lang; }, [lang]);
   const copy = dictionary[lang];
 
-  const restorePreferences = useEffectEvent(() => {
+  const restorePreferences = useEffectEvent(async () => {
+    await removeLegacyTokenKeys();
+    window.localStorage.removeItem('store-inventory-session-v1');
     setLang(window.localStorage.getItem('store-language') === 'mr' ? 'mr' : 'en');
     const saved = window.localStorage.getItem(sessionKey);
     if (!saved) return;
 
     try {
       const parsed = JSON.parse(saved) as Session;
-      if (!parsed.token || !['owner', 'shop'].includes(parsed.role) || (parsed.role === 'shop' && !parsed.shopId)) throw new Error('Invalid saved session');
+      if (!parsed.cacheId || !['owner', 'shop'].includes(parsed.role) || (parsed.role === 'shop' && !parsed.shopId)) throw new Error('Invalid saved session');
+      if(navigator.onLine){
+        const response=await fetch('/api/session',{cache:'no-store'}).catch(()=>null);
+        if(response && response.status<500){
+          if(!response.ok)throw new Error('Session expired');
+          const profile=await response.json() as Session;
+          if(profile.cacheId!==parsed.cacheId)throw new Error('Session changed');
+          parsed.role=profile.role;parsed.staffRole=profile.staffRole;parsed.shopId=profile.shopId;
+        }
+      }
       setSession(parsed);
-      void loadAfterLogin(parsed);
+      await loadAfterLogin(parsed);
     } catch {
       window.localStorage.removeItem(sessionKey);
     }
   });
   // Restore external browser storage once after hydration; the server cannot read it.
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { restorePreferences(); }, []);
+  useEffect(() => { void restorePreferences().catch(()=>setMessage('Could not restore device storage. Sign in to continue.')); }, []);
 
   async function loadAfterLogin(nextSession: Session) {
     try {
       setIsBusy(true);
       if (nextSession.role === 'owner') {
-        await loadOwner(nextSession.token, nextSession.shopId);
+        await loadOwner(nextSession.cacheId, nextSession.shopId);
       } else if (nextSession.shopId) {
-        await loadShop(nextSession.token, nextSession.shopId);
+        await loadShop(nextSession.cacheId, nextSession.shopId);
       }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not load Supabase data');
@@ -518,16 +527,16 @@ export default function Home() {
       const response = await fetch('/api/session', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({username,password})});
       const login = await response.json() as Record<string, unknown>;
       if (!response.ok) throw new Error(String(login.error || 'Invalid username or password'));
-      if (!login.token || login.error) throw new Error(String(login.error || 'Invalid username or password'));
+      if (!login.cacheId || login.error) throw new Error(String(login.error || 'Invalid username or password'));
       const nextSession: Session = {
-        token: String(login.token),
+        cacheId: String(login.cacheId),
         role: login.role === 'owner' ? 'owner' : 'shop',
         shopId: login.shopId ? String(login.shopId) : undefined,
         staffRole: login.staffRole === 'cashier' ? 'cashier' : login.role === 'shop' ? 'manager' : undefined,
       };
       setSession(nextSession);
       window.localStorage.setItem(sessionKey, JSON.stringify(nextSession));
-      setMessage(nextSession.role === 'owner' ? 'Logged in as owner admin' : `Logged in to ${login.shopName}`);
+      setMessage(nextSession.role === 'owner' ? 'Logged in as owner admin' : 'Signed in to your shop');
       await loadAfterLogin(nextSession);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Invalid username or password');
@@ -540,28 +549,27 @@ export default function Home() {
     if (!session || isBusy) return;
     setIsBusy(true);
     setDashboard(null);
-    try { await loadOwner(session.token, shopId); }
+    try { await loadOwner(session.cacheId, shopId); }
     catch (error) { setMessage(error instanceof Error ? error.message : copy.loading); }
     finally { setIsBusy(false); }
   }
 
   async function handleLogout() {
-    const token = session?.token;
+    const token = session?.cacheId;
     if(token){
       const entries=await listLocal<{shopId?:string}>(token+':').catch(()=>[]);
       if(entries.some(entry=>entry?.shopId)){setMessage('Sync pending bills before logging out to avoid losing unsynced sales.');return;}
-      await clearLocalSession(token).catch(()=>{});
     }
+    try {
+      const response=await fetch('/api/session',{method:'DELETE'});
+      if(!response.ok)throw new Error('Could not revoke your session. Retry logout when connected.');
+    } catch {setMessage('Connect to revoke your session, then retry logout.');return;}
+    if(token)await clearLocalSession(token).catch(()=>{});
     shopRequest.current += 1;
     setSession(null);
     setDashboard(null);
     setCredentialNote(null);
     window.localStorage.removeItem(sessionKey);
-    await fetch('/api/session', {method:'DELETE'}).catch(() => {});
-    if (token) {
-      try { await getSupabaseClient().rpc('logout_user', { p_token: token }); }
-      catch { /* Local sign-out still completes if the network is unavailable. */ }
-    }
   }
 
   async function handleAddShop(event: FormEvent<HTMLFormElement>) {
@@ -580,7 +588,7 @@ export default function Home() {
     try {
       setIsBusy(true);
       const { data, error } = await getSupabaseClient().rpc('create_shop', {
-        p_token: session.token,
+        p_token: session.cacheId,
         p_name: name,
         p_area: String(form.get('area') || 'Pune').trim() || 'Pune',
         p_username: username,
@@ -595,7 +603,7 @@ export default function Home() {
       });
       setMessage(`${shop.name} created`);
       formElement.reset();
-      await loadOwner(session.token, shopId);
+      await loadOwner(session.cacheId, shopId);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not create shop');
     } finally {
@@ -610,7 +618,7 @@ export default function Home() {
     try {
       setIsBusy(true);
       const { data, error } = await getSupabaseClient().rpc('reset_shop_password', {
-        p_token: session.token,
+        p_token: session.cacheId,
         p_shop_id: shopId,
         p_password: password,
       });
@@ -633,11 +641,11 @@ export default function Home() {
     setIsBusy(true);
     try {
       const { error } = await getSupabaseClient().rpc('admin_update_shop', {
-        p_token: session.token, p_shop_id: shop.id, p_name: name, p_area: area, p_active: active,
+        p_token: session.cacheId, p_shop_id: shop.id, p_name: name, p_area: area, p_active: active,
       });
       if (error) throw new Error(error.message);
       setMessage(active ? `${name} updated and active` : `${name} paused. Shop sessions revoked.`);
-      await loadOwner(session.token, selectedShopId);
+      await loadOwner(session.cacheId, selectedShopId);
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Could not update shop'); }
     finally { setIsBusy(false); }
   }
@@ -850,34 +858,34 @@ export default function Home() {
           <button className="ml-auto rounded border px-3 py-2" onClick={() => setOwnerOpen(true)}>{lang === 'mr' ? 'दुकाने व्यवस्थापित करा' : 'Manage / add shops'}</button>
         </div>}
 
-        {session.role==='owner' && dashboard && <StaffManagement key={session.token+dashboard.shop.id} shopName={dashboard.shop.name} rpc={async(action,details)=>{
-          const {data,error}=await getSupabaseClient().rpc('manage_shop_staff',{p_token:session.token,p_shop_id:dashboard.shop.id,p_action:action,p_data:details});
+        {session.role==='owner' && dashboard && <StaffManagement key={session.cacheId+dashboard.shop.id} shopName={dashboard.shop.name} rpc={async(action,details)=>{
+          const {data,error}=await getSupabaseClient().rpc('manage_shop_staff',{p_token:session.cacheId,p_shop_id:dashboard.shop.id,p_action:action,p_data:details});
           if(error)throw new Error(error.message);
-          return data;
+          return data as Staff[];
         }}/>}
         {dashboard ? (
           <RetailWorkspace
             fallback={<InventoryWorkspace data={dashboard} lang={lang} rpc={async (name, args) => {
-              const { data, error, status } = await getSupabaseClient().rpc(name, { ...args, p_token: session.token });
+              const { data, error, status } = await getSupabaseClient().rpc(name, { ...args, p_token: session.cacheId });
               if (error) throw Object.assign(new Error(`${error.code}: ${error.message}`), {code:error.code,status});
               return data;
             }} refresh={async () => {
-              await loadShop(session.token, dashboard.shop.id);
-              if (session.role === 'owner') await loadOwnerSummary(session.token);
+              await loadShop(session.cacheId, dashboard.shop.id);
+              if (session.role === 'owner') await loadOwnerSummary(session.cacheId);
             }} />}
             key={dashboard.shop.id}
-            sessionId={session.token}
+            sessionId={session.cacheId}
             shopId={dashboard.shop.id}
             lang={lang}
             staffRole={session.staffRole}
             rpc={async (name, args) => {
-              const { data, error, status } = await getSupabaseClient().rpc(name, { ...args, p_token: session.token });
+              const { data, error, status } = await getSupabaseClient().rpc(name, { ...args, p_token: session.cacheId });
               if (error) throw Object.assign(new Error(`${error.code}: ${error.message}`), {code:error.code,status});
               return data;
             }}
             onChanged={async () => {
-              await loadShop(session.token, dashboard.shop.id);
-              if (session.role === 'owner') await loadOwnerSummary(session.token);
+              await loadShop(session.cacheId, dashboard.shop.id);
+              if (session.role === 'owner') await loadOwnerSummary(session.cacheId);
             }}
           />
         ) : (

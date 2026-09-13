@@ -1,7 +1,7 @@
 "use client";
 import {useEffect,useRef,useState,type FormEvent} from 'react';
 import VoiceInput from './VoiceInput';
-type Staff={id:string;name:string;username:string;role:'cashier'|'manager';active:boolean};
+export type Staff={id:string;name:string;username:string;role:'cashier'|'manager';active:boolean};
 type Rpc=(action:string,data:Record<string,unknown>)=>Promise<Staff[]>;
 export default function StaffManagement({shopName,rpc}:{shopName:string;rpc:Rpc}){
  const [rows,setRows]=useState<Staff[]>([]),[error,setError]=useState(''),[busy,setBusy]=useState(false),[loaded,setLoaded]=useState(false);

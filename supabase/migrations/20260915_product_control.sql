@@ -19,6 +19,7 @@ declare actor app_sessions%rowtype; target items%rowtype; expected_hash text;
 begin
  select * into actor from app_sessions where token=p_token and expires_at>now();
  if not found then return jsonb_build_object('error','Session expired. Sign in again.'); end if;
+ if actor.staff_role='cashier' then return jsonb_build_object('error','Manager access required'); end if;
  select * into target from items where id=p_item_id;
  if not found or not can_access_shop(p_token,target.shop_id) then return jsonb_build_object('error','Product unavailable or shop access denied.'); end if;
  if actor.role='owner' then

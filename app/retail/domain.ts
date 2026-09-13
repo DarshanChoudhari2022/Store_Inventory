@@ -143,6 +143,8 @@ export type Workspace = {
     active: boolean;
     lines: CartLine[];
     automatic?: boolean;
+    route?: string;
+    skip_dates?: string[];
     last_attempt_at?: string;
     last_error?: string;
   }[];

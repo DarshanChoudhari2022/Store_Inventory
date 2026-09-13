@@ -31,6 +31,7 @@ begin
     or p_selling_price is null or p_selling_price not between 0 and 9999999999.99
     or round(p_buying_price,2) <> p_buying_price or round(p_selling_price,2) <> p_selling_price
     or p_reorder_level is null or p_reorder_level < 0 then raise exception 'VALIDATION'; end if;
+  if exists(select 1 from app_sessions where token=p_token and staff_role='cashier') then raise exception 'Manager access required'; end if;
   update items set name = trim(p_name), category = trim(p_category), buying_price = p_buying_price,
     default_selling_price = p_selling_price, reorder_level = p_reorder_level where id = p_item_id;
   return jsonb_build_object('id', p_item_id);
@@ -56,6 +57,7 @@ begin
   if not found or not can_access_shop(p_token, target.shop_id) then raise exception 'Shop access required'; end if;
   if p_stock is null or p_stock < 0 or p_expected_stock is null then raise exception 'VALIDATION'; end if;
   if target.stock <> p_expected_stock then raise exception 'STOCK_CHANGED'; end if;
+  if exists(select 1 from app_sessions where token=p_token and staff_role='cashier') then raise exception 'Manager access required'; end if;
   insert into stock_adjustments(shop_id,item_id,item_name,previous_stock,counted_stock,actor_role)
     values(target.shop_id,target.id,target.name,target.stock,p_stock,
       (select role from app_sessions where token = p_token));
@@ -88,7 +90,7 @@ begin
     values(p_shop_id,p_item_id,target.name,p_qty,target.buying_price,p_sold_price,(now() at time zone 'Asia/Kolkata')::date,p_request_id)
     returning * into sale_row;
   return jsonb_build_object('id',sale_row.id,'itemId',sale_row.item_id,'itemName',sale_row.item_name,
-    'qty',sale_row.qty,'buyingPrice',sale_row.buying_price,'soldPrice',sale_row.sold_price,
+    'qty',sale_row.qty,'buyingPrice',case when exists(select 1 from app_sessions where token=p_token and staff_role='cashier') then null else sale_row.buying_price end,'soldPrice',sale_row.sold_price,
     'date',sale_row.sale_date,'remainingStock',target.stock-p_qty);
 end;
 $$;

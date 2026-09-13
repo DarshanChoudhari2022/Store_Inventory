@@ -7,6 +7,7 @@ create or replace function public.retail_schedule(p_token uuid,p_shop_id uuid,p_
 returns void language plpgsql security definer set search_path=public,extensions as $$
 begin
  if not can_access_shop(p_token,p_shop_id) then raise exception 'Shop access required'; end if;
+ if exists(select 1 from app_sessions where token=p_token and staff_role='cashier') then raise exception 'Manager access required'; end if;
  perform pg_advisory_xact_lock(hashtextextended(p_shop_id::text,0));
  if not can_access_shop(p_token,p_shop_id) or not exists(select 1 from shops where id=p_shop_id and active) then raise exception 'Shop access required'; end if;
  update retail_recurring set automatic=p_enabled,last_error=null,last_attempt_at=null where id=p_id and shop_id=p_shop_id;

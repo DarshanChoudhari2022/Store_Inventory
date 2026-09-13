@@ -2,6 +2,8 @@
 
 A store inventory dashboard for a Pune store owner/admin. It supports multiple stores, generated store usernames/passwords, store-wise inventory, daily sales, item profit, buying price, selling price, low stock, highest selling product, closing stock updates, and Supabase-backed persistence.
 
+Current scope, gaps and acceptance targets: [Retail implementation plan](docs/RETAIL_IMPLEMENTATION_PLAN.md). Full Dhando retail parity is not yet complete.
+
 ## Run Locally
 
 ```bash

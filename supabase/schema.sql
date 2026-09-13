@@ -48,6 +48,20 @@ create table if not exists app_sessions (
   created_at timestamptz not null default now()
 );
 
+alter table app_sessions add column if not exists staff_role text;
+-- Redact nested invoice snapshots at database boundaries, including retries.
+create or replace function public.retail_redact_cost(value jsonb) returns jsonb
+language plpgsql immutable set search_path=public as $$
+begin
+ if jsonb_typeof(value)='object' then
+  return coalesce((select jsonb_object_agg(k,retail_redact_cost(v)) from jsonb_each(value) e(k,v)
+    where k not in ('cost','buying_price','buyingPrice')),'{}');
+ elsif jsonb_typeof(value)='array' then
+  return coalesce((select jsonb_agg(retail_redact_cost(v) order by n) from jsonb_array_elements(value) with ordinality e(v,n)),'[]');
+ end if;
+ return value;
+end $$;
+revoke all on function public.retail_redact_cost(jsonb) from public,anon,authenticated;
 create index if not exists idx_app_sessions_role_expires on app_sessions(role, expires_at);
 create index if not exists idx_app_sessions_shop_expires on app_sessions(shop_id, expires_at);
 create index if not exists idx_items_shop_created on items(shop_id, created_at);
@@ -260,6 +274,9 @@ begin
   from shops s
   where s.id = p_shop_id;
 
+  if exists(select 1 from app_sessions where token=p_token and staff_role='cashier') then
+    result:=retail_redact_cost(result);
+  end if;
   return result;
 end;
 $$;
@@ -346,6 +363,7 @@ as $$
 declare
   new_item items%rowtype;
 begin
+  if exists(select 1 from app_sessions where token=p_token and staff_role='cashier') then raise exception 'Manager access required'; end if;
   if not can_access_shop(p_token, p_shop_id) then
     raise exception 'Shop access required';
   end if;

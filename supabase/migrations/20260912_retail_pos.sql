@@ -69,6 +69,9 @@ create table if not exists retail_recurring (
  next_date date not null, active boolean not null default true, created_at timestamptz not null default now()
 );
 
+alter table retail_recurring add column if not exists route text not null default '';
+alter table retail_recurring add column if not exists skip_dates date[] not null default '{}';
+
 do $$ declare n text; begin
  foreach n in array array['retail_contacts','retail_invoices','retail_purchases','retail_payments','retail_expenses','retail_returns','retail_registers','retail_movements','retail_requests','retail_recurring'] loop
  execute format('alter table public.%I enable row level security',n);
@@ -118,25 +121,26 @@ revoke all on function public.retail_cash(uuid,timestamptz) from public,anon,aut
 
 create or replace function public.retail_workspace(p_token uuid,p_shop_id uuid,p_from date,p_to date) returns jsonb
 language plpgsql security definer set search_path=public,extensions as $$
-declare result jsonb;
+declare result jsonb; cashier boolean:=exists(select 1 from app_sessions where token=p_token and staff_role='cashier');
 begin
  if not can_access_shop(p_token,p_shop_id) then raise exception 'Shop access required'; end if;
  if p_from is null or p_to is null or p_to<p_from or p_to-p_from>366 then raise exception 'Choose a range of up to 366 days'; end if;
  select jsonb_build_object(
  'shop',jsonb_build_object('id',h.id,'name',h.name,'area',h.area,'active',h.active,'settings',h.settings),
  'products',coalesce((select jsonb_agg(to_jsonb(i)-'shop_id' order by i.name) from items i where i.shop_id=h.id),'[]'),
- 'contacts',coalesce((select jsonb_agg((to_jsonb(c)-'shop_id')||jsonb_build_object('balance',retail_balance(c.id)) order by c.name) from retail_contacts c where c.shop_id=h.id),'[]'),
- 'invoices',coalesce((select jsonb_agg(to_jsonb(i) order by i.created_at desc) from retail_invoices i where i.shop_id=h.id and (i.created_at at time zone 'Asia/Kolkata')::date between p_from and p_to),'[]'),
- 'purchases',coalesce((select jsonb_agg(to_jsonb(p) order by p.created_at desc) from retail_purchases p where p.shop_id=h.id and (p.created_at at time zone 'Asia/Kolkata')::date between p_from and p_to),'[]'),
- 'payments',coalesce((select jsonb_agg(to_jsonb(p) order by p.created_at desc) from retail_payments p where p.shop_id=h.id and (p.created_at at time zone 'Asia/Kolkata')::date between p_from and p_to),'[]'),
- 'expenses',coalesce((select jsonb_agg(to_jsonb(p) order by p.created_at desc) from retail_expenses p where p.shop_id=h.id and (p.created_at at time zone 'Asia/Kolkata')::date between p_from and p_to),'[]'),
- 'returns',coalesce((select jsonb_agg(to_jsonb(r)||jsonb_build_object('total',i.total,'tax',i.tax,'subtotal',i.subtotal,'cost',i.cost,'number',i.number)) from retail_returns r join retail_invoices i on i.id=r.invoice_id where r.shop_id=h.id and (r.created_at at time zone 'Asia/Kolkata')::date between p_from and p_to),'[]'),
+ 'contacts',coalesce((select jsonb_agg((to_jsonb(c)-'shop_id')||jsonb_build_object('balance',retail_balance(c.id)) order by c.name) from retail_contacts c where c.shop_id=h.id and (not cashier or c.kind='customer')),'[]'),
+ 'invoices',coalesce((select jsonb_agg(to_jsonb(i) order by i.created_at desc) from retail_invoices i where i.shop_id=h.id and i.created_at >= (p_from::timestamp at time zone 'Asia/Kolkata') and i.created_at < ((p_to+1)::timestamp at time zone 'Asia/Kolkata')),'[]'),
+ 'purchases',coalesce((select jsonb_agg(to_jsonb(p) order by p.created_at desc) from retail_purchases p where p.shop_id=h.id and not cashier and p.created_at >= (p_from::timestamp at time zone 'Asia/Kolkata') and p.created_at < ((p_to+1)::timestamp at time zone 'Asia/Kolkata')),'[]'),
+ 'payments',coalesce((select jsonb_agg(to_jsonb(p) order by p.created_at desc) from retail_payments p where p.shop_id=h.id and (not cashier or exists(select 1 from retail_contacts c where c.id=p.contact_id and c.kind='customer')) and p.created_at >= (p_from::timestamp at time zone 'Asia/Kolkata') and p.created_at < ((p_to+1)::timestamp at time zone 'Asia/Kolkata')),'[]'),
+ 'expenses',coalesce((select jsonb_agg(to_jsonb(p) order by p.created_at desc) from retail_expenses p where p.shop_id=h.id and not cashier and p.created_at >= (p_from::timestamp at time zone 'Asia/Kolkata') and p.created_at < ((p_to+1)::timestamp at time zone 'Asia/Kolkata')),'[]'),
+ 'returns',coalesce((select jsonb_agg(to_jsonb(r)||jsonb_build_object('total',i.total,'tax',i.tax,'subtotal',i.subtotal,'cost',i.cost,'number',i.number)) from retail_returns r join retail_invoices i on i.id=r.invoice_id where r.shop_id=h.id and r.created_at >= (p_from::timestamp at time zone 'Asia/Kolkata') and r.created_at < ((p_to+1)::timestamp at time zone 'Asia/Kolkata')),'[]'),
  'returnedIds',coalesce((select jsonb_agg(r.invoice_id) from retail_returns r where r.shop_id=h.id),'[]'),
- 'registers',coalesce((select jsonb_agg(to_jsonb(r)||jsonb_build_object('currentExpected',case when r.closed_at is null then r.opening+retail_cash(h.id,r.opened_at) else r.expected end) order by r.opened_at desc) from retail_registers r where r.shop_id=h.id and (r.closed_at is null or (r.opened_at at time zone 'Asia/Kolkata')::date between p_from and p_to)),'[]'),
- 'movements',coalesce((select jsonb_agg(to_jsonb(m) order by m.created_at desc) from retail_movements m where m.shop_id=h.id and (m.created_at at time zone 'Asia/Kolkata')::date between p_from and p_to),'[]'),
- 'recurring',coalesce((select jsonb_agg(to_jsonb(r) order by r.next_date) from retail_recurring r where r.shop_id=h.id),'[]'),
- 'legacy',coalesce((select jsonb_agg(to_jsonb(s)) from sales s where s.shop_id=h.id and s.invoice_id is null and s.sale_date between p_from and p_to),'[]')
+ 'registers',coalesce((select jsonb_agg(to_jsonb(r)||jsonb_build_object('currentExpected',case when r.closed_at is null then r.opening+retail_cash(h.id,r.opened_at) else r.expected end) order by r.opened_at desc) from retail_registers r where r.shop_id=h.id and not cashier and (r.closed_at is null or (r.opened_at at time zone 'Asia/Kolkata')::date between p_from and p_to)),'[]'),
+ 'movements',coalesce((select jsonb_agg(to_jsonb(m) order by m.created_at desc) from retail_movements m where m.shop_id=h.id and not cashier and m.created_at >= (p_from::timestamp at time zone 'Asia/Kolkata') and m.created_at < ((p_to+1)::timestamp at time zone 'Asia/Kolkata')),'[]'),
+ 'recurring',coalesce((select jsonb_agg(to_jsonb(r) order by r.next_date) from retail_recurring r where r.shop_id=h.id and not cashier),'[]'),
+ 'legacy',coalesce((select jsonb_agg(to_jsonb(s)) from sales s where s.shop_id=h.id and not cashier and s.invoice_id is null and s.sale_date between p_from and p_to),'[]')
  ) into result from shops h where h.id=p_shop_id;
+ if cashier then result:=retail_redact_cost(result);end if;
  return result;
 end $$;
 
@@ -159,7 +163,7 @@ begin
  select * into old from retail_requests where shop_id=p_shop_id and request_id=p_request_id;
  if found then
    if old.payload<>jsonb_build_object('action',p_action,'data',p_data) then raise exception 'Request already used with different details'; end if;
-   return old.result;
+   return case when exists(select 1 from app_sessions where token=p_token and staff_role='cashier') then retail_redact_cost(old.result) else old.result end;
  end if;
  select * into h from shops where id=p_shop_id;
  if not h.active then raise exception 'Shop is paused. Ask the super admin to reactivate it.'; end if;
@@ -167,6 +171,7 @@ begin
  if method not in ('cash','upi','card','credit') then raise exception 'Choose a valid payment method'; end if;
 
  if p_action='contact' then
+   if p_data->>'kind'='supplier' and exists(select 1 from app_sessions where token=p_token and staff_role='cashier') then raise exception 'Manager access required'; end if;
    if p_data->>'kind' not in ('customer','supplier') or length(trim(coalesce(p_data->>'name',''))) not between 1 and 120 or length(coalesce(p_data->>'phone',''))>20 or length(coalesce(p_data->>'address',''))>500 then raise exception 'Check contact details'; end if;
    insert into retail_contacts(shop_id,kind,name,phone,address,gstin) values(p_shop_id,p_data->>'kind',trim(p_data->>'name'),coalesce(p_data->>'phone',''),coalesce(p_data->>'address',''),upper(coalesce(p_data->>'gstin',''))) returning id into v_id;
    result:=jsonb_build_object('id',v_id);
@@ -194,6 +199,12 @@ begin
    if p_action='recurring_run' then
      select * into rec from retail_recurring where id=(p_data->>'id')::uuid and shop_id=p_shop_id and active for update;
      if not found or rec.next_date>v_date then raise exception 'No due recurring bill'; end if;
+     if rec.next_date=any(rec.skip_dates) then
+       update retail_recurring set next_date=case rec.cadence when 'daily' then rec.next_date+1 when 'weekly' then rec.next_date+7 else (rec.next_date+interval '1 month')::date end where id=rec.id;
+       result:=jsonb_build_object('skipped',true,'date',rec.next_date,'templateId',rec.id);
+       insert into retail_requests(shop_id,request_id,payload,result) values(p_shop_id,p_request_id,jsonb_build_object('action',p_action,'data',p_data),result);
+       return case when exists(select 1 from app_sessions where token=p_token and staff_role='cashier') then retail_redact_cost(result) else result end;
+     end if;
      -- A recurring run posts one due occurrence and advances only after successful billing.
      lines:=rec.lines; v_contact:=rec.customer_id; method:='credit';
    else lines:=p_data->'lines'; v_contact:=nullif(p_data->>'contactId','')::uuid; end if;
@@ -256,6 +267,7 @@ begin
    select * into contact from retail_contacts where id=(p_data->>'contactId')::uuid and shop_id=p_shop_id;
    if not found then raise exception 'Contact not found'; end if;
    balance:=retail_balance(contact.id); amount:=(p_data->>'amount')::numeric;
+   if contact.kind='supplier' and exists(select 1 from app_sessions where token=p_token and staff_role='cashier') then raise exception 'Manager access required'; end if;
    if amount is null or amount<=0 or amount>balance or round(amount,2)<>amount or method='credit' then raise exception 'Payment exceeds outstanding balance or is invalid'; end if;
    insert into retail_payments(shop_id,contact_id,amount,method) values(p_shop_id,contact.id,amount,method) returning id into v_id;
    result:=jsonb_build_object('id',v_id);
@@ -317,7 +329,7 @@ begin
  else raise exception 'Unknown retail action';
  end if;
  insert into retail_requests(shop_id,request_id,payload,result) values(p_shop_id,p_request_id,jsonb_build_object('action',p_action,'data',p_data),result);
- return result;
+ return case when exists(select 1 from app_sessions where token=p_token and staff_role='cashier') then retail_redact_cost(result) else result end;
 end $$;
 
 -- Include returned customer repayments in the ledger so a return cannot create phantom credit.

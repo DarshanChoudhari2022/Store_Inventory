@@ -46,6 +46,8 @@ import Receipt from "./Receipt";
 import ScanBarcode from "./ScanBarcode";
 import BarcodeLabel from "./BarcodeLabel";
 const PurchaseScan = dynamic(() => import('./PurchaseScan'), {ssr:false});
+const DeliveryPlanner = dynamic(() => import('./DeliveryPlanner'), {ssr:false});
+const Quotes = dynamic(() => import('./Quotes'), {ssr:false});
 import VoiceInput from "./VoiceInput";
 import Appearance from './Appearance';
 import DeleteProductDialog from './DeleteProductDialog';
@@ -65,6 +67,7 @@ type View =
   | "sell"
   | "products"
   | "bills"
+  | "quotes"
   | "customers"
   | "suppliers"
   | "purchases"
@@ -373,6 +376,7 @@ export default function RetailWorkspace({
     ["sell", "Sell", "विक्री", ShoppingCart],
     ["products", "Products", "उत्पादने", Package],
     ["bills", "Bills", "बिले", ReceiptText],
+    ["quotes", "Quotations & orders", "कोटेशन व ऑर्डर", ReceiptText],
     ["customers", "Customers", "ग्राहक", Users],
     ["suppliers", "Suppliers", "पुरवठादार", Truck],
     ["purchases", "Purchases", "खरेदी", Store],
@@ -1479,6 +1483,7 @@ export default function RetailWorkspace({
         )}
         {view === "recurring" && (
           <>
+            <DeliveryPlanner data={data} disabled={busy||offline} rpc={rpc} onSaved={reload}/>
             <div className="retail-toolbar">
               <button
                 className="primary"
@@ -1516,7 +1521,8 @@ export default function RetailWorkspace({
                     disabled={busy || !r.active || r.next_date > today()}
                     onClick={async () => {
                       const i = await perform("recurring_run", { id: r.id });
-                      if (i) setReceipt(i as Invoice);
+                      if (i && !(i as {skipped?:boolean}).skipped) setReceipt(i as Invoice);
+                      else if (i) setNotice('Planned delivery skipped. No bill or stock movement was created.');
                     }}
                   >
                     Generate due bill
@@ -1538,6 +1544,7 @@ export default function RetailWorkspace({
             />
           </>
         )}
+        {view === "quotes" && <Quotes data={data} cart={cart} disabled={busy||offline} rpc={rpc} onInvoice={setReceipt} onCreated={()=>setCart([])} onChanged={async()=>{await reload();await onChanged();}}/>}
         {view === "settings" && (
           <><Appearance lang={lang} />
           <form
