@@ -55,6 +55,7 @@ export type Settings = {
   paper?: string;
 };
 export type Invoice = {
+  tenders?:Partial<Record<'cash'|'upi'|'card',number>>;
   due_date?:string|null;
   id: string;
   number: string;

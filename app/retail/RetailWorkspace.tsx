@@ -43,6 +43,8 @@ import {
   type Invoice,
 } from "./domain";
 import Receipt from "./Receipt";
+import type {HeldRef} from "./HeldBills";
+const HeldBills=dynamic(()=>import("./HeldBills"),{ssr:false});
 import ScanBarcode from "./ScanBarcode";
 import BarcodeLabel from "./BarcodeLabel";
 const PurchaseScan = dynamic(() => import('./PurchaseScan'), {ssr:false});
@@ -76,7 +78,9 @@ type View =
   | "recurring"
   | "settings";
 type Dialog = { type: string; product?: Product; id?: string };
-type TenderDraft = {contactId:string;method:string;paid:string;reference:string;interstate:boolean;supplyState:string};
+type SplitTender = {cash:string;upi:string;card:string};
+const emptySplit=():SplitTender=>({cash:"",upi:"",card:""});
+type TenderDraft = {held?:HeldRef|null;split?:SplitTender;contactId:string;method:string;paid:string;reference:string;interstate:boolean;supplyState:string};
 type SavedDraft = TenderDraft & { cart: CartLine[]; purchaseCart: CartLine[]; view: View; details?: Record<string,TenderDraft> };
 const emptyTender = ():TenderDraft => ({contactId:'',method:'cash',paid:'',reference:'',interstate:false,supplyState:''});
 export default function RetailWorkspace({
@@ -114,6 +118,8 @@ export default function RetailWorkspace({
     [low, setLow] = useState(false),
     [cart, setCart] = useState<CartLine[]>([]),
     [purchaseCart, setPurchaseCart] = useState<CartLine[]>([]);
+  const [held,setHeld]=useState<HeldRef|null>(null);
+  const [split,setSplit]=useState<SplitTender>(emptySplit);
   const [contactId, setContactId] = useState(""),
     [method, setMethod] = useState("cash"),
     [paid, setPaid] = useState(""),
@@ -145,7 +151,7 @@ export default function RetailWorkspace({
           else if (draft) {
             if(draft.details)basketDetails.current=draft.details;
             setCart(draft.cart || []); setPurchaseCart(draft.purchaseCart || []);
-            setContactId(draft.contactId || ''); setMethod(draft.method || 'cash'); setPaid(draft.paid || '');
+            setContactId(draft.contactId || ''); setMethod(draft.method || 'cash'); setPaid(draft.paid || '');setSplit(draft.split||emptySplit());setHeld(draft.held||null);
             setReference(draft.reference || ''); setInterstate(Boolean(draft.interstate)); setSupplyState(draft.supplyState || '');
             if (draft.view === 'purchases') setView('purchases');
           }
@@ -172,8 +178,8 @@ export default function RetailWorkspace({
     };
   }, [namespace]);
   useEffect(() => {
-    if (draftReady) void writeLocal(namespace + ":cart", {cart, purchaseCart, contactId, method, paid, reference, interstate, supplyState, view,details:basketDetails.current}).catch(() => {});
-  }, [cart, purchaseCart, contactId, method, paid, reference, interstate, supplyState, view, draftReady, namespace]);
+    if (draftReady) void writeLocal(namespace + ":cart", {cart, purchaseCart, contactId, method, paid, split, held, reference, interstate, supplyState, view,details:basketDetails.current}).catch(() => {});
+  }, [cart, purchaseCart, contactId, method, paid, split, held, reference, interstate, supplyState, view, draftReady, namespace]);
   useEffect(() => {
     rpcRef.current = rpc;
   }, [rpc]);
@@ -275,10 +281,10 @@ export default function RetailWorkspace({
           "This operation needs a connection. Your entries are still here.",
         );
       }
-      const result = await rpcRef.current(action === "contact_edit" ? "retail_contact_update" : "retail_action", {
+      const result = await rpcRef.current(action === "contact_edit" ? "retail_contact_update" : action==="checkout" ? "retail_counter_checkout" : "retail_action", {
         p_shop_id: shopId,
         p_request_id: request.current.id,
-        ...(action === "contact_edit" ? {} : {p_action: action}),
+        ...(action === "contact_edit" || action==="checkout" ? {} : {p_action: action}),
         p_data: payload,
       });
       if (action === "checkout") {
@@ -336,10 +342,9 @@ export default function RetailWorkspace({
         if (sale.rejection) continue;
         let i: Invoice;
         try {
-        i = (await rpcRef.current("retail_action", {
+        i = (await rpcRef.current("retail_counter_checkout", {
           p_shop_id: shopId,
           p_request_id: sale.id,
-          p_action: "checkout",
           p_data: sale.data,
         })) as Invoice;
         } catch (e) {
@@ -430,8 +435,9 @@ export default function RetailWorkspace({
       prev.map((l) => (l.id === id ? { ...l, [key]: value } : l)),
     );
   const checkout = async () => {
+    if(method==='split' && (Object.values(split).some(value=>!Number.isFinite(Number(value||0)) || Number(value||0)<0 || Math.round(Number(value||0)*100)/100!==Number(value||0)) || Object.values(split).filter(value=>Number(value)>0).length<2)){setError('Enter valid amounts in at least two payment methods.');return;}
     const enteredPaid = paid === '' ? Math.round(total * 100) / 100 : Number(paid);
-    const amountPaid = method === 'credit' ? 0 : method === 'cash' ? Math.min(Math.round(total*100)/100,enteredPaid) : enteredPaid;
+    const amountPaid = method === 'split' ? Math.round(Object.values(split).reduce((n,v)=>n+Number(v||0),0)*100)/100 : method === 'credit' ? 0 : method === 'cash' ? Math.min(Math.round(total*100)/100,enteredPaid) : enteredPaid;
     if (!currentCart.length || currentCart.some(line => !Number.isFinite(line.qty) || line.qty <= 0 || !Number.isFinite(line.price) || line.price < 0 || line.discount < 0 || line.discount > 100)) { setError('Check every quantity, price and discount before saving.'); return; }
     if (!Number.isFinite(amountPaid) || amountPaid < 0 || amountPaid > Math.round(total*100)/100 || (amountPaid < Math.round(total*100)/100 && !contactId)) { setError('Choose a customer for credit and enter an amount between zero and the bill total.'); return; }
     if (!purchasing && currentCart.some(line => { const p = data?.products.find(product => product.id === line.id); return !p || line.qty > availableStock(p) || (['pcs','pack'].includes(p.unit) && !Number.isInteger(line.qty)); })) { setError('Check available stock and quantities. Pending offline bills reserve stock on this device.'); return; }
@@ -440,13 +446,15 @@ export default function RetailWorkspace({
       contactId,
       method,
       paid: amountPaid,
+      ...(!purchasing && held ? {held}:{}),
+      ...(method==='split'?{tenders:Object.fromEntries(Object.entries(split).map(([key,value])=>[key,Number(value||0)]))}:{}),
       reference,
       interstate,
       supplyState,
     });
     if (result) {
       setCurrentCart([]);
-      setPaid("");
+      setPaid("");setSplit(emptySplit());setHeld(null);
       setContactId("");
       setReference("");
       if (!purchasing && !(result as { queued?: boolean }).queued)
@@ -455,9 +463,9 @@ export default function RetailWorkspace({
   };
   const changeView = (v: View) => {
     if ((v === 'purchases') !== purchasing) {
-      basketDetails.current[purchasing?'purchases':'sell']={contactId,method,paid,reference,interstate,supplyState};
+      basketDetails.current[purchasing?'purchases':'sell']={contactId,method,paid,split,held,reference,interstate,supplyState};
       const next=basketDetails.current[v==='purchases'?'purchases':'sell'] || emptyTender();
-      setContactId(next.contactId);setMethod(next.method);setPaid(next.paid);setReference(next.reference);setInterstate(next.interstate);setSupplyState(next.supplyState);
+      setContactId(next.contactId);setMethod(next.method);setPaid(next.paid);setSplit(next.split||emptySplit());setHeld(next.held||null);setReference(next.reference);setInterstate(next.interstate);setSupplyState(next.supplyState);
     }
     setView(v);
     setNavOpen(false);
@@ -662,7 +670,7 @@ export default function RetailWorkspace({
                 await writeLocal(namespace + ':cart', lines);
                 await removeLocal(namespace + ':sale:' + s.id);
                 setCart(lines); setView('sell'); setContactId(String(s.data.contactId || ''));
-                setMethod(String(s.data.method || 'cash')); setPaid(String(s.data.paid ?? ''));
+                setMethod(String(s.data.method || 'cash')); setPaid(String(s.data.paid ?? ''));setHeld((s.data.held as HeldRef)||null);setSplit(Object.fromEntries(['cash','upi','card'].map(key=>[key,String((s.data.tenders as Record<string,unknown>)?.[key]??'')])) as SplitTender);
                 setReference(String(s.data.reference || '')); setInterstate(Boolean(s.data.interstate));
                 setSupplyState(String(s.data.supplyState || '')); request.current = null;
                 setPending(await listLocal<PendingSale>(namespace + ':sale:'));
@@ -726,6 +734,7 @@ export default function RetailWorkspace({
             <span>IST</span>
           </div>
         )}
+        {view==='sell' && <details className="retail-panel"><summary>{held ? `Resumed bill: ${held.label}` : 'Hold or resume a bill'}</summary><HeldBills shopId={shopId} rpc={rpc} draft={{cart,contactId,method,paid,split,interstate,supplyState}} held={held} hasCart={cart.length>0} disabled={busy||offline} revision={data} onSaved={()=>{setCart([]);setHeld(null);setPaid('');setSplit(emptySplit());}} onResume={(draft,reference)=>{setCart(draft.cart as CartLine[]);setContactId(String(draft.contactId||''));setMethod(String(draft.method||'cash'));setPaid(String(draft.paid||''));setSplit((draft.split as SplitTender)||emptySplit());setInterstate(Boolean(draft.interstate));setSupplyState(String(draft.supplyState||''));setHeld(reference);}}/></details>}
         {(view === "sell" || view === "purchases") && (
           <>
             <div className="retail-pos">
@@ -837,11 +846,12 @@ export default function RetailWorkspace({
                           <strong>{p ? productName(p) : "Unavailable product"}</strong>
                           <button
                             aria-label={`Remove ${p ? productName(p) : 'product'}`}
-                            onClick={() =>
+                            onClick={() => {
+                              if(!purchasing && currentCart.length===1)setHeld(null);
                               setCurrentCart((prev) =>
                                 prev.filter((x) => x.id !== l.id),
-                              )
-                            }
+                              );
+                            }}
                           >
                             <Trash2 size={15} />
                           </button>
@@ -933,12 +943,13 @@ export default function RetailWorkspace({
                       <option value="cash">Cash / रोकड</option>
                       <option value="upi">UPI</option>
                       <option value="card">Card / कार्ड</option>
+                      {!purchasing && <option value="split">Split payment</option>}
                       {!purchasing && (
                         <option value="credit">Credit / उधार</option>
                       )}
                     </select>
                   </label>
-                  {method !== "credit" && (
+                  {method !== "credit" && method !== "split" && (
                     <label>
                       {t(
                         !purchasing && method === "cash" ? "Cash received (leave blank for exact)" : "Amount paid (leave blank for full)",
@@ -955,7 +966,8 @@ export default function RetailWorkspace({
                       />
                     </label>
                   )}
-                  {!purchasing && method === 'cash' && <div className="retail-cash-chips">
+                  {!purchasing && method==='split' && <div className="retail-form-grid">{(['cash','upi','card'] as const).map(key=><label key={key}>{key.toUpperCase()} amount<VoiceInput type="number" min="0" step="0.01" value={split[key]} onChange={e=>setSplit(current=>({...current,[key]:e.target.value}))}/></label>)}<small>Enter amounts actually collected in at least two methods. Return any cash change before entering its amount.</small></div>}
+                  {!purchasing && method === 'cash'  && <div className="retail-cash-chips">
                     <small>{t('Cash received · change is returned to the customer', 'मिळालेली रोकड · ग्राहकाला सुट्टे परत द्या')}</small>
                     <div>{[50,100,200,500].map(amount => <button type="button" key={amount} onClick={() => setPaid(String(amount))}>{cash(amount)}</button>)}</div>
                     <strong>{t('Change to return', 'परत द्यायचे सुट्टे')}: {cash(Math.max(0, Number(paid || total) - total))}</strong>
@@ -992,7 +1004,7 @@ export default function RetailWorkspace({
                       {t("Remaining due", "उरलेली उधारी")}:{" "}
                       {cash(
                         total -
-                          (method === "credit"
+                          (method === "split" ? Object.values(split).reduce((n,v)=>n+Number(v||0),0) : method === "credit"
                             ? 0
                             : paid === ""
                               ? total
@@ -1483,8 +1495,7 @@ export default function RetailWorkspace({
                 m,
                 cash(
                   data.invoices
-                    .filter((i) => i.method === m)
-                    .reduce((n, i) => n + Number(i.paid), 0),
+                    .reduce((n, i) => n + (i.method===m ? Number(i.paid) : i.method==='split' ? Number(i.tenders?.[m as 'cash'|'upi'|'card']||0) : 0), 0),
                 ),
               ])}
             />
@@ -1553,7 +1564,7 @@ export default function RetailWorkspace({
             />
           </>
         )}
-        {view === "quotes" && <Quotes data={data} cart={cart} disabled={busy||offline} rpc={rpc} onInvoice={setReceipt} onCreated={()=>setCart([])} onChanged={async()=>{await reload();await onChanged();}}/>}
+        {view === "quotes" && <Quotes data={data} cart={cart} disabled={busy||offline} rpc={rpc} onInvoice={setReceipt} onCreated={()=>{setCart([]);setHeld(null);}} onChanged={async()=>{await reload();await onChanged();}}/>}
         {view === "settings" && (
           <><Appearance lang={lang} />
           <form

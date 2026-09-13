@@ -44,6 +44,14 @@ try {
  await client.query('savepoint credit_limit');
  await assert.rejects(action('checkout',{...payload,paid:0}),/credit limit exceeded/);
  await client.query('rollback to savepoint credit_limit');
+ const held=await call('retail_hold',[sessionA.token,a.id,crypto.randomUUID(),'save',JSON.stringify({label:'Verification hold',draft:{cart:[{id:product.id,qty:1,price:20,discount:0}]}})]);
+ const heldPayload={lines:[{id:product.id,qty:1,price:20,discount:0}],method:'split',tenders:{cash:7,upi:13},held:{id:held.id,version:held.version}};
+ const heldKey=crypto.randomUUID();
+ const split=await call('retail_counter_checkout',[sessionA.token,a.id,heldKey,JSON.stringify(heldPayload)]);
+ assert.equal(split.method,'split');assert.equal(split.tenders.cash,7);
+ assert.equal((await call('retail_counter_checkout',[sessionA.token,a.id,heldKey,JSON.stringify(heldPayload)])).id,split.id);
+ assert.equal(Number(await call('retail_cash',[a.id,'2000-01-01'])),17);
+ assert.equal((await call('retail_hold',[sessionA.token,a.id,crypto.randomUUID(),'list','{}'])).length,0);
  const removable=await action('product',{name:'Verification variant',category:'Test',price:20,cost:10,stock:1,reorder:0,unit:'pcs',style:'VERIFY',size:'M',colour:'Navy',mrp:25});
  assert.match((await call('delete_item_confirmed',[sessionA.token,removable.id,'wrong'])).error,/Incorrect password/);
  assert.equal((await call('delete_item_confirmed',[sessionA.token,removable.id,password])).deleted,true);
@@ -52,6 +60,7 @@ try {
  assert.equal((await client.query('select count(*)::int n from owner_accounts where username=$1',[username])).rows[0].n,0);
  console.log('Live verification passed: super-admin creates independent shops, both logins work, checkout retries save once, stock and credit reconcile, cross-shop access is denied. All verification records rolled back.');
  console.log('Daily report totals, scoped history and credit-limit rejection also passed.');
+ console.log('Held-bill checkout, split tender, retry identity and cash allocation passed.');
  const cron=await client.query("select active from cron.job where jobname='storestock-recurring-bills'");
  assert.equal(cron.rows[0]?.active,true);console.log('Recurring scheduler is registered and active.');
 } catch(e) {await client.query('rollback').catch(()=>{});console.error(e.message);process.exitCode=1;}

@@ -145,6 +145,7 @@ export default function Receipt({
           <div>
             <dt>Paid ({invoice.method})</dt>
             <dd>{cash(invoice.paid)}</dd>
+            {invoice.method==='split' && Object.entries(invoice.tenders||{}).filter(([,amount])=>Number(amount)>0).map(([method,amount])=><div key={method}><dt>{method.toUpperCase()}</dt><dd>{cash(Number(amount))}</dd></div>)}
           </div>
           <div>
             <dt>Due at issue</dt>

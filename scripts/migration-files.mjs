@@ -18,4 +18,6 @@ export const migrationFiles = [
   'migrations/20260925_report_projection.sql',
   'migrations/20260926_scoped_workspace.sql',
   'migrations/20260927_contact_credit.sql',
+  'migrations/20260928_split_tender.sql',
+  'migrations/20260929_held_bills.sql',
 ];
