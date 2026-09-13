@@ -114,6 +114,7 @@ export default function RetailWorkspace({
     [from, setFrom] = useState(today()),
     [to, setTo] = useState(today());
   const [query, setQuery] = useState(""),
+    [lookupProducts, setLookupProducts] = useState<Product[]>([]),
     [category, setCategory] = useState(""),
     [low, setLow] = useState(false),
     [aging, setAging] = useState<Record<string, number> | null>(null),
@@ -502,7 +503,7 @@ export default function RetailWorkspace({
     setError("");
   };
   const rows =
-    (view==='products' ? data?.products : data?.products.filter(
+    (view==='products' ? data?.products : view==='sell' && query.trim() ? lookupProducts : data?.products.filter(
       (p) =>
         p.is_active !== false &&
         (!category || p.category === category) &&
@@ -526,6 +527,16 @@ export default function RetailWorkspace({
       );
   };
   const summary = data ? data.summary ?? report(data) : null;
+  useEffect(() => {
+    if (view !== 'sell' || !query.trim() || offline) { setLookupProducts([]); return; }
+    let active = true;
+    const timer = window.setTimeout(() => {
+      void rpc('retail_product_lookup', {p_shop_id: shopId, p_query: query.trim(), p_limit: 50})
+        .then(value => { if (active) setLookupProducts((value as Product[]) || []); })
+        .catch(() => { if (active) setLookupProducts([]); });
+    }, 180);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [query, view, offline, rpc, shopId]);
   useEffect(() => {
     if (!selectedContact || view !== 'customers' || offline) return;
     let active = true;
