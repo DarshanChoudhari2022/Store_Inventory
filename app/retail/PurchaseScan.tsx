@@ -13,6 +13,7 @@ export default function PurchaseScan({
   onClose: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const workerRef = useRef<Worker | null>(null);
   const [busy, setBusy] = useState(false),
     [text, setText] = useState(""),
     [error, setError] = useState(""),
@@ -38,6 +39,7 @@ export default function PurchaseScan({
           throw new Error("Use JPG, PNG or WebP images under 8 MB each.");
       }
       worker = new Worker(new URL('./ocr-worker.ts', import.meta.url), {type:'module'});
+      workerRef.current = worker;
       const result = await new Promise<{text:string}>((resolve,reject)=>{
         worker!.onmessage = event => { if(event.data.type==='progress') setProgress(event.data.value); else if(event.data.type==='complete') resolve(event.data); else reject(new Error(event.data.message || 'OCR failed')); };
         worker!.onerror = () => reject(new Error('OCR worker could not start'));
@@ -48,8 +50,15 @@ export default function PurchaseScan({
       setError(e instanceof Error ? e.message : "Could not scan this image");
     } finally {
       worker?.terminate();
+      workerRef.current = null;
       setBusy(false);
     }
+  }
+  function cancelScan() {
+    workerRef.current?.postMessage({cancel:true});
+    workerRef.current?.terminate();
+    workerRef.current = null;
+    setBusy(false); setProgress('');
   }
   function extract() {
     const found: (CartLine & { source: string })[] = [];
@@ -90,8 +99,8 @@ export default function PurchaseScan({
     >
       <header>
         <h2 id="purchase-scan-title">Scan supplier bill</h2>
-        <button disabled={busy} onClick={onClose}>
-          Close
+        <button onClick={busy ? cancelScan : onClose}>
+          {busy ? 'Cancel scan' : 'Close'}
         </button>
       </header>
       <p>

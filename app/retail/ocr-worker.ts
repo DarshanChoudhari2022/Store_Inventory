@@ -1,9 +1,11 @@
 import {createWorker} from 'tesseract.js';
 
-type Request = {files: File[]};
+type Request = {files?: File[]; cancel?: boolean};
 const scope = self as unknown as {postMessage: (message: unknown) => void; onmessage: ((event: MessageEvent<Request>) => void) | null};
 
 scope.onmessage = async (event: MessageEvent<Request>) => {
+  if (event.data.cancel) { return; }
+  if (!event.data.files?.length) { scope.postMessage({type:'error',message:'No images selected'}); return; }
   let worker: Awaited<ReturnType<typeof createWorker>> | undefined;
   try {
     worker = await createWorker('eng', 1, {logger: message => scope.postMessage({type:'progress',value:`${message.status} ${Math.round((message.progress || 0) * 100)}%`})});
