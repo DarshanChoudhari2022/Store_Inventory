@@ -5,6 +5,7 @@ export const runtime='nodejs';
 const reply=(body:unknown,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}});
 
 export async function POST(request:NextRequest){
+ const started=performance.now();
  if(!sameOrigin(request))return reply({error:'Request origin rejected'},403);
  let body:Record<string,unknown>;
  try{body=await jsonBody(request);}catch{return reply({error:'Invalid request'},400);}
@@ -12,7 +13,7 @@ export async function POST(request:NextRequest){
  try{
   const client=database();
   const {data,error}=await client.rpc('login_user',{p_username:body.username,p_password:body.password});
-  if(error||!data?.token||data.error)return reply({error:data?.error||'Invalid username or password'},401);
+  if(error||!data?.token||data.error){ console.warn(JSON.stringify({event:'login_failure',latencyMs:Math.round(performance.now()-started),reason:error?'rpc_error':'invalid_credentials'})); return reply({error:data?.error||'Invalid username or password'},401); }
   const token=String(data.token);
   const profile=await client.rpc('retail_session_profile',{p_token:token});
   if(profile.error||!profile.data){await client.rpc('logout_user',{p_token:token});return reply({error:'Unable to establish session'},503);}
@@ -20,8 +21,9 @@ export async function POST(request:NextRequest){
   if(previous&&previous!==token)await client.rpc('logout_user',{p_token:previous});
   const response=reply({...profile.data,cacheId:cacheId(token)});
   response.cookies.set(cookieName,token,{...cookieOptions,maxAge:12*60*60});
+  console.info(JSON.stringify({event:'login_success',latencyMs:Math.round(performance.now()-started)}));
   return response;
- }catch{return reply({error:'Unable to sign in'},503);}
+ }catch(error){ console.error(JSON.stringify({event:'login_unavailable',latencyMs:Math.round(performance.now()-started),errorClass:error instanceof Error?error.name:'UnknownError'})); return reply({error:'Unable to sign in'},503);}
 }
 export async function GET(request:NextRequest){
  const token=sessionToken(request);if(!token)return reply({error:'Sign in required'},401);
