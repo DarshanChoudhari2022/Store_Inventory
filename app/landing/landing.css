@@ -1474,4 +1474,6 @@
 .login-intro p { max-width:430px; color:#657266; font-size:1.1rem; line-height:1.6; }
 .login-points { display:grid; gap:12px; margin-top:28px; color:#246b4b; font-weight:600; }
 .login-page .auth-card { margin:0; box-shadow:0 26px 80px rgba(36,107,75,.16); border:1px solid #dfe8e0; background:rgba(255,255,255,.94); }
+.login-submit { display:flex; align-items:center; justify-content:center; min-height:56px; visibility:visible; position:relative; z-index:2; border:0; cursor:pointer; }
+.login-page input { min-height:54px; color:#17201b; background:#fff; font-family:var(--font-geist-sans), Arial, sans-serif; font-size:1rem; }
 @media (max-width: 760px) { .login-frame { padding:24px 18px 40px; } .login-back { margin-bottom:44px; } .login-layout { display:block; } .login-intro { margin-bottom:34px; } .login-intro h1 { font-size:2.5rem; } .login-intro p { font-size:1rem; } .login-points { grid-template-columns:1fr 1fr; font-size:.84rem; gap:10px; } .login-page .auth-card { padding:24px 20px; } }
