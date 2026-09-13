@@ -14,7 +14,8 @@ assert.equal((await post('/api/rpc',{...body,cacheId:'wrong-tab'},cookie)).statu
 assert.equal((await post('/api/rpc',body,cookie,'https://untrusted.example')).status,403);
 assert.equal((await post('/api/rpc',{...body,name:'retail_run_schedules'},cookie)).status,400);
 assert.equal((await post('/api/rpc',{...body,padding:'x'.repeat(1_000_001)},cookie)).status,400);
-const shops=await (await post('/api/rpc',body,cookie)).json();assert.equal(shops.data.length,2);
+const renewed=await post('/api/rpc',body,cookie);assert.match(renewed.headers.get('set-cookie'),/Max-Age=43200/i);
+const shops=await renewed.json();assert.equal(shops.data.length,2);
 assert.equal((await post('/api/rpc',{...body,args:{p_token:'not-a-real-token'}},cookie)).status,200);
 const get=await fetch(base+'/api/session',{headers:{cookie}});assert.equal(get.status,200);assert.equal((await get.json()).token,undefined);
 const logout=await fetch(base+'/api/session',{method:'DELETE',headers:{cookie,origin:base}});assert.equal(logout.status,200);

@@ -15,4 +15,7 @@ export const migrationFiles = [
   'migrations/20260922_session_profile.sql',
   'migrations/20260923_request_limits.sql',
   'migrations/20260924_history_indexes.sql',
+  'migrations/20260925_report_projection.sql',
+  'migrations/20260926_scoped_workspace.sql',
+  'migrations/20260927_contact_credit.sql',
 ];

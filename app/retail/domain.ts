@@ -19,6 +19,8 @@ export type Product = {
 };
 export const productName = (p: Product) => [p.name,p.style_code,p.size,p.colour].filter(Boolean).join(' · ');
 export type Contact = {
+  credit_limit?:number|null;
+  payment_terms_days?:number;
   id: string;
   kind: "customer" | "supplier";
   name: string;
@@ -53,6 +55,7 @@ export type Settings = {
   paper?: string;
 };
 export type Invoice = {
+  due_date?:string|null;
   id: string;
   number: string;
   customer_id: string | null;
@@ -80,6 +83,10 @@ export type Purchase = {
   created_at: string;
 };
 export type Workspace = {
+  pageOffset?:number;
+  pageView?:string;
+  pageTotals?:Record<string,number>;
+  summary?: ReturnType<typeof report> & {asOf:string};
   shop: {
     id: string;
     name: string;

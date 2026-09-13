@@ -27,8 +27,8 @@ Not feature-for-feature equivalent. Core billing, clothing variants, purchasing,
 
 ## Audit findings to track
 
-- `retail_workspace_page` exists but the UI still downloads `retail_workspace` and slices locally. Pagination is not yet a payload-size improvement.
-- The current summary materialization is not consumed by reports and its gross profit includes tax. It needs correction before use.
+- Initial audit found UI-only pagination. Bills and movements now use scoped server pages; product/contact lists still need server pagination.
+- The original summary materialization is not used. A new transactional daily projection now powers report totals and reconciles returns, tax, legacy sales and expenses. The old materialization is deprecated.
 - Initial audit found a cookie endpoint that still returned bearer tokens to the browser. This change replaces that transport; renewal and broader browser/offline acceptance remain pending.
 - OCR already used Tesseract's worker; an additional wrapper worker needs runtime browser validation and cancellation handling.
 - Recurring execution already runs in pg_cron. Improve scheduling isolation, fairness and observability rather than describing it as a new browser-to-worker migration.
@@ -68,3 +68,17 @@ Dhando's public website describes product capabilities, not an independently ver
 | Retail completeness | Every P1/P2 workflow above passes UI, database, mobile and device acceptance | Quotations/orders and scheduled delivery skips added; remaining feature gaps are explicitly open. |
 
 Additional hardening implemented after the first validation pass: cashier workspace responses omit supplier and management records and recursively remove buying costs from invoices and retry responses; legacy dashboard costs are redacted and management pagination is blocked for cashiers. Database-backed request limits allow 600 proxy operations per shop per minute (shared across server instances), returning HTTP 429 with Retry-After. This is a protective default, not a capacity benchmark; direct database administrative access is outside this HTTP budget. Product/invoice quota triggers acquire the shop transaction lock before checking counts. HTTP request bodies are capped while streaming. History filters use half-open IST timestamp bounds and composite indexes, and page ordering includes unique IDs. Full bootstrap pagination and reporting read-model integration remain unfinished.
+
+## Second implementation pass
+
+Implemented and verified:
+
+- Daily report projection updated transactionally with invoices, full returns, legacy sales and expenses. Profit excludes tax. Rollback and migration rebuild tests reconcile to source records. The UI consumes the authenticated report RPC and labels its timestamp. Customer/supplier balances remain live ledger calculations with supporting indexes.
+- Scoped workspace loading: Sell no longer fetches unrelated transaction histories. Bills and stock movements load 50 rows per server page. Customer statements and report exports retain their full selected-range records. Product/contacts remain a complete catalogue for current search, selectors and offline operation; their server pagination is still open. Offset pagination has stable ID tie-breakers but is not a snapshot cursor under concurrent inserts.
+- Manager contact editing with credit limits and payment terms. New invoices snapshot their due date. The database blocks additional credit above the limit while permitting fully paid sales; failed invoices roll back stock changes. Existing invoice/customer snapshots stay unchanged. Aging reports and reminder flows remain open.
+- Successful authenticated RPC calls renew the HttpOnly cookie idle window for up to 12 hours, capped by the original database expiry. This does not revive expired/revoked sessions or extend the database hard lifetime. Cookie transport tests cover renewal and revocation.
+- Offline workspace caches distinguish views and validate date/page identity, preventing a cached history page from being represented as another range/page. Only the last visited page per view is cached; uncached history requires connectivity.
+
+Validation: all 45 automated tests pass, including new source/projection reconciliation, 60-record pagination coverage, cross-shop and cashier restrictions, credit-limit enforcement, retries, rollback and migration rebuild assertions. Lint, typecheck, production builds and HTTP checks pass. Browser checks verified owner sign-in, contact policy save and report freshness display. Live Supabase checks verified report totals, scoped history, credit rejection and existing multi-shop flows; test records were rolled back.
+
+Still open: product/contact server pagination, dedicated lazy report screens and streamed large exports; split tender and held bills; aging/reminders; partial returns and product lots; accounting/GST preparation; printer adapters/device acceptance; OCR/offline mobile acceptance; appearance completeness; checksummed migrations, backup hardening/restore drills, monitoring and measured hosted load tests. This pass does not mark the overall plan or competitive replacement readiness complete.

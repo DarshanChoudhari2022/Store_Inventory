@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {PGlite} from '@electric-sql/pglite';
 import {pgcrypto} from '@electric-sql/pglite/contrib/pgcrypto';
+import {report} from '../app/retail/domain.ts';
 import {migrationFiles} from '../scripts/migration-files.mjs';
 
 test('retail delivery skips, routes and cashier permissions use the complete migration chain',async()=>{
@@ -115,6 +116,63 @@ test('retail delivery skips, routes and cashier permissions use the complete mig
   await assert.rejects(quoteAction(manager.token,'invoice',{id:quote.id,method:'cash',paid:36}),/transition/);
   assert.equal(Number((await db.query('select stock from items where id=$1',[product.id])).rows[0].stock),17);
   assert.equal((await call('retail_quote_list',manager.token,shop.id,0))[0].status,'invoiced');
+  const reconcile=async()=>{
+   const rows=await call('retail_workspace',manager.token,shop.id,day,tomorrow);
+   const actual=await call('retail_report',manager.token,shop.id,day,tomorrow);
+   for(const [key,value] of Object.entries(report(rows)))assert.equal(Number(actual[key]),value,`Report mismatch: ${key}`);
+   return actual;
+  };
+  await assert.rejects(call('retail_report',cashier.token,shop.id,day,tomorrow),/Manager/);
+  await assert.rejects(call('retail_report',outsider.token,shop.id,day,tomorrow),/Shop access/);
+  await reconcile();
+  await action(manager.token,'settings',{gstin:'27ABCDE1234F1Z5',state:'27',address:'Fixture address'});
+  const taxed=await action(manager.token,'product',{name:'Taxed product',category:'General',price:118,cost:50,stock:3,reorder:0,unit:'pcs',tax:18,hsn:'1234'});
+  const taxedBill=await action(manager.token,'checkout',{lines:[{id:taxed.id,qty:1,price:118}],method:'cash',paid:118});
+  assert.equal(Number(taxedBill.tax),18);
+  await reconcile();
+  await action(manager.token,'expense',{description:'Packaging',amount:3,method:'cash'});
+  await reconcile();
+  await action(manager.token,'return',{id:taxedBill.id,reason:'Test full return',method:'cash'});
+  await reconcile();
+  await call('record_sale_v2',manager.token,shop.id,product.id,1,20,crypto.randomUUID());
+  await reconcile();
+  // Projection changes roll back with the source transaction.
+  const before=await reconcile();
+  await db.exec('begin');
+  await action(manager.token,'expense',{description:'Rolled back',amount:100,method:'cash'});
+  await reconcile();await db.exec('rollback');
+  assert.equal(Number((await reconcile()).expenses),Number(before.expenses));
+  // Rebuild existing data without double-counting on migration replay.
+  await db.exec(await readFile(new URL('../supabase/migrations/20260925_report_projection.sql',import.meta.url),'utf8'));
+  await reconcile();
+  await db.exec('begin');
+  await db.query("insert into retail_invoices(shop_id,number,shop_snapshot,lines,subtotal,tax,total,cost,paid,method) select $1,'page-'||n,'{}','[]',1,0,1,0,1,'cash' from generate_series(1,60)n",[shop.id]);
+  const scoped=(token,view,offset=0)=>call('retail_workspace_scoped',token,shop.id,day,tomorrow,view,offset);
+  const sell=await scoped(manager.token,'sell');
+  assert.deepEqual(sell.invoices,[]);assert.deepEqual(sell.movements,[]);assert.deepEqual(sell.purchases,[]);
+  assert.ok(sell.products.length>0);
+  const first=await scoped(manager.token,'bills'),second=await scoped(manager.token,'bills',50);
+  assert.equal(first.invoices.length,50);assert.ok(second.invoices.length>0);
+  assert.equal(new Set([...first.invoices,...second.invoices].map(i=>i.id)).size,first.pageTotals.invoices);
+  assert.equal((await scoped(manager.token,'reports')).invoices.length,first.pageTotals.invoices);
+  noCosts(await scoped(cashier.token,'bills'));
+  await db.exec('rollback');
+  await assert.rejects(scoped(outsider.token,'bills'),/Shop access/);
+  await assert.rejects(scoped(manager.token,'bills',-1),/Invalid workspace/);
+  const editData={id:customer.id,name:'Updated customer',phone:'1234567890',address:'New address',gstin:'',creditLimit:10,paymentTerms:7};
+  const edit=(token,details=editData,id=crypto.randomUUID())=>call('retail_contact_update',token,shop.id,id,JSON.stringify(details));
+  await assert.rejects(edit(cashier.token),/Manager/);await assert.rejects(edit(outsider.token),/Shop access/);
+  const editId=crypto.randomUUID();assert.deepEqual(await edit(manager.token,editData,editId),await edit(manager.token,editData,editId));
+  const creditBody={contactId:customer.id,lines:[{id:product.id,qty:1,price:20}],method:'cash',paid:10};
+  await assert.rejects(action(manager.token,'checkout',{...creditBody,paid:0}),/credit limit exceeded/);
+  const creditKey=crypto.randomUUID();const credit=await action(manager.token,'checkout',creditBody,creditKey);
+  assert.deepEqual(await action(manager.token,'checkout',creditBody,creditKey),credit);
+  assert.equal(credit.due_date,(await db.query("select ((now() at time zone 'Asia/Kolkata')::date+7)::text d")).rows[0].d);
+  await assert.rejects(action(manager.token,'checkout',creditBody),/credit limit exceeded/);
+  // A customer at their credit ceiling can still pay in full.
+  await action(manager.token,'checkout',{...creditBody,paid:20});await reconcile();
+  await edit(manager.token,{...editData,creditLimit:''});
+  await action(manager.token,'checkout',creditBody);await reconcile();
   await db.exec('set role anon');
   await assert.rejects(db.query('select * from shop_staff'),/permission denied/);
  }finally{await db.close();}

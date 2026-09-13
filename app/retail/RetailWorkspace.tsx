@@ -177,13 +177,15 @@ export default function RetailWorkspace({
   useEffect(() => {
     rpcRef.current = rpc;
   }, [rpc]);
+  const historyOffset = (pages[view==='bills'?'invoices':'movements'] || 0)*50;
+  const workspaceKey = `${namespace}:workspace:${view}`;
   const reload = useCallback(async () => {
     const n = ++generation.current;
     const restoreWorkspace = async () => {
-      const cached = await readLocal<{ value: Workspace; at: number }>(
-        namespace + ":workspace",
+      const cached = await readLocal<{ value: Workspace; at: number; from:string; to:string }>(
+        workspaceKey,
       );
-      if (cached && Date.now() - cached.at < 12 * 60 * 60 * 1000) {
+      if (cached && Date.now() - cached.at < 12 * 60 * 60 * 1000 && (view==='sell' || (cached.from===from && cached.to===to && cached.value.pageOffset===historyOffset))) {
         if (n === generation.current) { setData(cached.value); setOffline(true); }
         return;
       }
@@ -193,11 +195,15 @@ export default function RetailWorkspace({
     }
     if (!navigator.onLine) return restoreWorkspace();
     let w: Workspace;
-    try { w = (await rpcRef.current("retail_workspace", {
+    try { w = (await rpcRef.current("retail_workspace_scoped", {
       p_shop_id: shopId,
       p_from: from,
       p_to: to,
-    })) as Workspace; } catch (error) {
+      p_view:view,
+      p_offset:historyOffset,
+    })) as Workspace;
+      if(staffRole!=='cashier')w.summary=await rpcRef.current("retail_report",{p_shop_id:shopId,p_from:from,p_to:to}) as NonNullable<Workspace["summary"]>;
+    } catch (error) {
       if (isNetworkFailure(error)) return restoreWorkspace();
       throw error;
     }
@@ -207,12 +213,13 @@ export default function RetailWorkspace({
       if (n !== generation.current) return;
       setOffline(false);
       setData(w);
-      void writeLocal(namespace + ":workspace", {
+      void writeLocal(workspaceKey, {
         value: w,
+        from,to,
         at: Date.now(),
       }).catch(() => {});
     }
-  }, [shopId, from, to, namespace]);
+  }, [shopId, from, to, namespace,staffRole,view,historyOffset,workspaceKey]);
   useEffect(() => {
     let alive = true;
     const counter = generation;
@@ -268,10 +275,10 @@ export default function RetailWorkspace({
           "This operation needs a connection. Your entries are still here.",
         );
       }
-      const result = await rpcRef.current("retail_action", {
+      const result = await rpcRef.current(action === "contact_edit" ? "retail_contact_update" : "retail_action", {
         p_shop_id: shopId,
         p_request_id: request.current.id,
-        p_action: action,
+        ...(action === "contact_edit" ? {} : {p_action: action}),
         p_data: payload,
       });
       if (action === "checkout") {
@@ -394,8 +401,8 @@ export default function RetailWorkspace({
     setCurrentCart = purchasing ? setPurchaseCart : setCart;
   const total = currentCart.reduce((n, l) => n + lineTotal(l), 0);
   const pageSize = 50;
-  const pageOf = <T,>(key: string, rows: T[]) => rows.slice((pages[key] || 0) * pageSize, ((pages[key] || 0) + 1) * pageSize);
-  const pager = (key: string, totalRows: number) => <Pagination page={pages[key] || 0} pages={Math.max(1, Math.ceil(totalRows / pageSize))} onChange={(next) => setPages(current => ({...current, [key]: next}))} />;
+  const pageOf = <T,>(key: string, rows: T[]) => ["invoices","movements"].includes(key) && data?.pageTotals ? (data.pageOffset===(pages[key]||0)*pageSize && data.pageView===view ? rows : []) : rows.slice((pages[key] || 0) * pageSize, ((pages[key] || 0) + 1) * pageSize);
+  const pager = (key: string, totalRows: number) => <Pagination page={pages[key] || 0} pages={Math.max(1, Math.ceil((data?.pageTotals?.[key] ?? totalRows) / pageSize))} onChange={(next) => setPages(current => ({...current, [key]: next}))} />;
   const availableStock = (product: Product) => Math.max(0, product.stock - (offline ? pending.filter(sale => !sale.rejection).reduce((qty, sale) => qty + ((sale.data.lines as CartLine[]) || []).filter(line => line.id === product.id).reduce((n,line) => n + line.qty, 0), 0) : 0));
   const add = (p: Product) =>
     setCurrentCart((prev) => {
@@ -484,7 +491,7 @@ export default function RetailWorkspace({
         ),
       );
   };
-  const summary = data ? report(data) : null;
+  const summary = data ? data.summary ?? report(data) : null;
   async function importProducts(file: File) {
     try {
       if (file.size > 2_000_000) throw new Error("CSV must be under 2 MB");
@@ -1236,6 +1243,7 @@ export default function RetailWorkspace({
                         ? "Receive payment"
                         : "Pay supplier"}
                     </button>
+                    {staffRole!=="cashier" && <button onClick={()=>setDialog({type:"contact_edit",id:c.id})}>Edit / credit terms</button>}
                     <button onClick={() => setSelectedContact(c.id)}>
                       Statement
                     </button>
@@ -1370,6 +1378,7 @@ export default function RetailWorkspace({
         )}
         {view === "reports" && (
           <>
+            <p role="status">{data.summary ? `Database totals as of ${new Date(data.summary.asOf).toLocaleString()}` : "Offline totals from this device"}{offline ? " · Cached; reconnect to refresh" : ""}</p>
             <div className="retail-kpis">
               {[
                 ["Sales incl. tax", summary!.sales],
@@ -1684,6 +1693,7 @@ export default function RetailWorkspace({
               payload = { ...f, kind: action };
               action = "contact";
             }
+            if (action === "contact_edit") payload = {...f,id:dialog.id};
             if (action === "settle") payload = { ...f, contactId: dialog.id };
             if (action === "return") payload = { ...f, id: dialog.id };
             if (action === "recurring")
@@ -1811,6 +1821,15 @@ export default function RetailWorkspace({
               <Field name="gstin" label="GSTIN (optional)" />
             </>
           )}
+          {dialog.type === "contact_edit" && <>
+            <Field name="name" label="Name" value={data.contacts.find(c=>c.id===dialog.id)?.name} required/>
+            <Field name="phone" label="Phone" value={data.contacts.find(c=>c.id===dialog.id)?.phone}/>
+            <Field name="address" label="Address" value={data.contacts.find(c=>c.id===dialog.id)?.address}/>
+            <Field name="gstin" label="GSTIN (optional)" value={data.contacts.find(c=>c.id===dialog.id)?.gstin}/>
+            <Field name="creditLimit" label="Customer credit limit (blank = no limit)" type="number" min="0" step="0.01" value={String(data.contacts.find(c=>c.id===dialog.id)?.credit_limit??'')}/>
+            <Field name="paymentTerms" label="Payment terms in days" type="number" min="0" max="365" step="1" value={String(data.contacts.find(c=>c.id===dialog.id)?.payment_terms_days??0)} required/>
+            <p>New credit bills use these terms. Existing receipts and due dates retain their original details. Credit limits apply to customer billing.</p>
+          </>}
           {["expense", "settle", "register_open", "register_close"].includes(
             dialog.type,
           ) && (

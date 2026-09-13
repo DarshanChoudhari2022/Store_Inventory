@@ -35,6 +35,15 @@ try {
  assert.equal((await call('retail_workspace',[sessionB.token,b.id,day,day])).products.length,0);
  await action('settle',{contactId:customer.id,amount:30,method:'upi'});
  assert.equal((await call('retail_workspace',[sessionA.token,a.id,day,day])).contacts[0].balance,0);
+ const totals=await call('retail_report',[sessionA.token,a.id,day,day]);
+ assert.equal(totals.sales,40);assert.equal(totals.gross,20);assert.equal(totals.receivable,0);
+ const counter=await call('retail_workspace_scoped',[sessionA.token,a.id,day,day,'sell',0]);
+ assert.equal(counter.invoices.length,0);assert.equal(counter.products.length,1);
+ assert.equal((await call('retail_workspace_scoped',[sessionA.token,a.id,day,day,'bills',0])).invoices.length,1);
+ await call('retail_contact_update',[sessionA.token,a.id,crypto.randomUUID(),JSON.stringify({id:customer.id,name:'Verification customer',creditLimit:10,paymentTerms:7})]);
+ await client.query('savepoint credit_limit');
+ await assert.rejects(action('checkout',{...payload,paid:0}),/credit limit exceeded/);
+ await client.query('rollback to savepoint credit_limit');
  const removable=await action('product',{name:'Verification variant',category:'Test',price:20,cost:10,stock:1,reorder:0,unit:'pcs',style:'VERIFY',size:'M',colour:'Navy',mrp:25});
  assert.match((await call('delete_item_confirmed',[sessionA.token,removable.id,'wrong'])).error,/Incorrect password/);
  assert.equal((await call('delete_item_confirmed',[sessionA.token,removable.id,password])).deleted,true);
@@ -42,6 +51,7 @@ try {
  await client.query('rollback');
  assert.equal((await client.query('select count(*)::int n from owner_accounts where username=$1',[username])).rows[0].n,0);
  console.log('Live verification passed: super-admin creates independent shops, both logins work, checkout retries save once, stock and credit reconcile, cross-shop access is denied. All verification records rolled back.');
+ console.log('Daily report totals, scoped history and credit-limit rejection also passed.');
  const cron=await client.query("select active from cron.job where jobname='storestock-recurring-bills'");
  assert.equal(cron.rows[0]?.active,true);console.log('Recurring scheduler is registered and active.');
 } catch(e) {await client.query('rollback').catch(()=>{});console.error(e.message);process.exitCode=1;}
