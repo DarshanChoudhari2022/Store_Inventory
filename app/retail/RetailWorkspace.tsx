@@ -198,12 +198,12 @@ export default function RetailWorkspace({
   const workspaceKey = `${namespace}:workspace:${view}`;
   const reload = useCallback(async () => {
     const n = ++generation.current;
+    const cached = await readLocal<{ value: Workspace; at: number; from:string; to:string }>(workspaceKey);
+    const cacheMatches = cached && Date.now() - cached.at < 12 * 60 * 60 * 1000 && (view==='sell' || (cached.from===from && cached.to===to && cached.value.pageOffset===historyOffset && cached.value.catalogOffset===catalogOffset && cached.value.catalogQuery===catalogQuery && cached.value.catalogLow===catalogLow));
+    if (cacheMatches && n === generation.current) { setData(cached.value); setOffline(false); }
     const restoreWorkspace = async () => {
-      const cached = await readLocal<{ value: Workspace; at: number; from:string; to:string }>(
-        workspaceKey,
-      );
-      if (cached && Date.now() - cached.at < 12 * 60 * 60 * 1000 && (view==='sell' || (cached.from===from && cached.to===to && cached.value.pageOffset===historyOffset && cached.value.catalogOffset===catalogOffset && cached.value.catalogQuery===catalogQuery && cached.value.catalogLow===catalogLow))) {
-        if (n === generation.current) { setData(cached.value); setOffline(true); }
+      if (cacheMatches) {
+        if (n === generation.current) setOffline(true);
         return;
       }
       throw new Error(
