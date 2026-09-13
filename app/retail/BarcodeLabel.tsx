@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { cash, productName, type Product } from "./domain";
+import { labelText, printEscPosBluetooth } from "./thermal-printer";
 export default function BarcodeLabel({
   product,
   onClose,
@@ -11,6 +12,7 @@ export default function BarcodeLabel({
   const ref = useRef<HTMLDialogElement>(null),
     svg = useRef<SVGSVGElement>(null);
   const [error, setError] = useState("");
+  const [printerStatus, setPrinterStatus] = useState("");
   useEffect(() => {
     const element = ref.current;
     element?.showModal();
@@ -44,7 +46,15 @@ export default function BarcodeLabel({
         <button disabled={!!error} onClick={() => window.print()}>
           Print label
         </button>
+        <button disabled={!!error} onClick={async () => {
+          setPrinterStatus("Connecting to Bluetooth printer…");
+          try { await printEscPosBluetooth(labelText(product)); setPrinterStatus("Sent to thermal printer."); }
+          catch (error) { setPrinterStatus(error instanceof Error ? error.message : "Could not print to Bluetooth printer."); }
+        }}>
+          Bluetooth label print
+        </button>
       </div>
+      {printerStatus && <p className="retail-notice" role="status">{printerStatus}</p>}
       <article className="retail-receipt" style={{ width: "50mm" }}>
         <h3 id="barcode-title">{productName(product)}</h3>
         <p>

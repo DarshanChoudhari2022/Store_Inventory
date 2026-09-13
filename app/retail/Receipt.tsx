@@ -1,7 +1,8 @@
 "use client";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cash, type Invoice } from "./domain";
 import { readAppearance } from './Appearance';
+import { printEscPosBluetooth, receiptText } from "./thermal-printer";
 
 export default function Receipt({
   invoice,
@@ -12,6 +13,7 @@ export default function Receipt({
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const qr = useRef<HTMLCanvasElement>(null);
+  const [printerStatus, setPrinterStatus] = useState("");
   useEffect(() => {
     const element = ref.current;
     element?.showModal();
@@ -33,7 +35,7 @@ export default function Receipt({
         .catch(() => {});
   }, [s.upi, invoice.shop_snapshot.name]);
   const share = () => {
-    const text = `${invoice.shop_snapshot.name}\nBill ${invoice.number}\n${invoice.lines.map((l) => `${l.name} × ${l.qty}: ${cash(l.total)}`).join("\n")}\nTotal: ${cash(invoice.total)}\nPaid: ${cash(invoice.paid)}\nDue at issue: ${cash(invoice.total - invoice.paid)}`;
+    const text = receiptText(invoice);
     window.open(
       `https://wa.me/?text=${encodeURIComponent(text)}`,
       "_blank",
@@ -50,8 +52,14 @@ export default function Receipt({
       <div className="receipt-actions">
         <button onClick={onClose}>Close</button>
         <button onClick={() => window.print()}>Print / PDF</button>
+        <button onClick={async () => {
+          setPrinterStatus("Connecting to Bluetooth printer…");
+          try { await printEscPosBluetooth(receiptText(invoice)); setPrinterStatus("Sent to thermal printer."); }
+          catch (error) { setPrinterStatus(error instanceof Error ? error.message : "Could not print to Bluetooth printer."); }
+        }}>Bluetooth thermal print</button>
         <button onClick={share}>Share on WhatsApp</button>
       </div>
+      {printerStatus && <p className="retail-notice" role="status">{printerStatus}</p>}
       <article
         className="retail-receipt"
         style={{ maxWidth: s.paper === "58" ? "58mm" : "80mm" }}
