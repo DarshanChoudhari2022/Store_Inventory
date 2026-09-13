@@ -528,9 +528,10 @@ export default function RetailWorkspace({
   };
   const summary = data ? data.summary ?? report(data) : null;
   useEffect(() => {
-    if (view !== 'sell' || !query.trim() || offline) { setLookupProducts([]); return; }
+    if (view !== 'sell' || !query.trim() || offline) return;
     let active = true;
     const timer = window.setTimeout(() => {
+      setLookupProducts([]);
       void rpc('retail_product_lookup', {p_shop_id: shopId, p_query: query.trim(), p_limit: 50})
         .then(value => { if (active) setLookupProducts((value as Product[]) || []); })
         .catch(() => { if (active) setLookupProducts([]); });
