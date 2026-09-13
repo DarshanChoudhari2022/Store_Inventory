@@ -27,4 +27,5 @@ export const migrationFiles = [
   'migrations/20261004_migration_checksums.sql',
   'migrations/20261005_feature_flags.sql',
   'migrations/20261006_feature_flag_controls.sql',
+  'migrations/20261007_accounting_exports.sql',
 ];

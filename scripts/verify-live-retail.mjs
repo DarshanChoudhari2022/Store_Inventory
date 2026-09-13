@@ -43,6 +43,9 @@ try {
  assert.equal((await call('retail_workspace',[sessionA.token,a.id,day,day])).contacts[0].balance,0);
  const totals=await call('retail_report',[sessionA.token,a.id,day,day]);
  assert.equal(totals.sales,40);assert.equal(totals.gross,20);assert.equal(totals.receivable,0);
+ const accounting=await call('retail_accounting_export',[sessionA.token,a.id,day,day]);
+ assert.ok(Array.isArray(accounting.gstr1));assert.ok(Array.isArray(accounting.trialBalance));
+ assert.equal(accounting.gstr3b.grossSales,40);
  const counter=await call('retail_workspace_scoped',[sessionA.token,a.id,day,day,'sell',0]);
  assert.equal(counter.invoices.length,0);assert.equal(counter.products.length,1);
  assert.equal((await call('retail_workspace_scoped',[sessionA.token,a.id,day,day,'bills',0])).invoices.length,1);
@@ -76,6 +79,7 @@ try {
  console.log('Daily report totals, scoped history and credit-limit rejection also passed.');
  console.log('Held-bill checkout, split tender, retry identity and cash allocation passed.');
  console.log('Super-admin feature controls passed.');
+ console.log('Accounting and GST workpaper export passed.');
  const cron=await client.query("select active from cron.job where jobname='storestock-recurring-bills'");
  assert.equal(cron.rows[0]?.active,true);console.log('Recurring scheduler is registered and active.');
 } catch(e) {await client.query('rollback').catch(()=>{});console.error(e.message);process.exitCode=1;}

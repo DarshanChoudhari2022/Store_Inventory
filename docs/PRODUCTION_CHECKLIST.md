@@ -1,6 +1,6 @@
 # Production release checklist
 
-Validated September 12, 2026. This is a retail POS; restaurant workflows are outside the agreed scope.
+Validated September 13, 2026. This is a retail POS; restaurant workflows are outside the agreed scope.
 
 ## Application and database
 
@@ -9,7 +9,7 @@ Validated September 12, 2026. This is a retail POS; restaurant workflows are out
 - Configure Vercel's production branch as `main` and its Next.js framework preset. Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` to this project's public settings.
 - Keep `DATABASE_URL` only in ignored local environment or a protected migration runner. Never configure it as a public variable or put it in the browser bundle.
 - Run `npm run migrate:retail` before the release. It applies the complete base and retail migrations in one transaction, preserves existing records, and refreshes PostgREST. Migration connections verify Supabase's certificate using the bundled public CA.
-- Run `npm run verify:live`. It creates temporary accounts inside a transaction, verifies independent shops, retry-safe checkout, balances, and denied cross-shop access, then rolls back all verification records. It also checks the scheduler registration.
+- Run `npm run verify:live`. It creates temporary accounts inside a transaction, verifies independent shops, retry-safe checkout, balances, denied cross-shop access, feature controls, accounting/GST workpaper export, and scheduler registration, then rolls back all verification records.
 - Run `npm run backup:db` on the protected migration host and retain encrypted custom-format dumps. Test recovery with `RESTORE_CONFIRM=YES BACKUP_FILE=... npm run restore:db` against a non-production database before launch and at least quarterly.
 - `schema_migrations` records the release SQL set applied by the migration scripts; review it during deployments.
 - Newly created shops start empty. Existing records are preserved. No default credentials are seeded.
@@ -32,4 +32,4 @@ Validated September 12, 2026. This is a retail POS; restaurant workflows are out
 
 ## Scope limits
 
-The app supports retail billing, products, clothing variants, stock counts, customer/supplier dues, purchases, returns, cash reconciliation, reports, receipt sharing, recurring templates, cashier/manager operator accounts, and isolated shop accounts. Current reporting is not full double-entry accounting or GST filing. OCR requires review and is not a guaranteed handwritten-invoice parser. Batch-level expiry, complete Marathi translation, and native printer integrations remain separate work. Do not advertise complete Dhando parity or device certification.
+The app supports retail billing, products, clothing variants, stock counts, customer/supplier dues, purchases, returns, cash reconciliation, GST workpapers, accounting statement workpapers, receipt sharing, recurring templates, cashier/manager operator accounts, release controls, and isolated shop accounts. Current exports are preparation workpapers, not direct GSTN filing, e-invoice submission, or accountant-certified books. OCR requires review and is not a guaranteed handwritten-invoice parser. Batch-level expiry, complete Marathi translation, and native printer integrations remain separate work. Do not advertise complete Dhando parity or device certification until those are accepted.
