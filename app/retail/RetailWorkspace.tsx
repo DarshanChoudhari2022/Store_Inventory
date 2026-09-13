@@ -117,6 +117,7 @@ export default function RetailWorkspace({
   const [query, setQuery] = useState(""),
     [category, setCategory] = useState(""),
     [low, setLow] = useState(false),
+    [aging, setAging] = useState<Record<string, number> | null>(null),
     [cart, setCart] = useState<CartLine[]>([]),
     [purchaseCart, setPurchaseCart] = useState<CartLine[]>([]);
   const [held,setHeld]=useState<HeldRef|null>(null);
@@ -526,6 +527,14 @@ export default function RetailWorkspace({
       );
   };
   const summary = data ? data.summary ?? report(data) : null;
+  useEffect(() => {
+    if (!selectedContact || view !== 'customers' || offline) return;
+    let active = true;
+    void rpc('retail_contact_aging', {p_shop_id: shopId, p_contact_id: selectedContact})
+      .then(value => { if (active) setAging(value as Record<string, number>); })
+      .catch(() => { if (active) setAging(null); });
+    return () => { active = false; };
+  }, [selectedContact, view, offline, rpc, shopId]);
   async function importProducts(file: File) {
     try {
       if (file.size > 2_000_000) throw new Error("CSV must be under 2 MB");
@@ -1282,7 +1291,7 @@ export default function RetailWorkspace({
                         : "Pay supplier"}
                     </button>
                     {staffRole!=="cashier" && <button onClick={()=>setDialog({type:"contact_edit",id:c.id})}>Edit / credit terms</button>}
-                    <button onClick={() => setSelectedContact(c.id)}>
+                    <button onClick={() => { setAging(null); setSelectedContact(c.id); }}>
                       Statement
                     </button>
                   </div>,
@@ -1299,6 +1308,7 @@ export default function RetailWorkspace({
                   Entries in the selected date range. Outstanding is the
                   all-time balance.
                 </p>
+                {aging && <div className="retail-kpis" aria-label="Customer ageing"><Kpi label="Current" value={cash(Number(aging.current || 0))}/><Kpi label="1–30 days" value={cash(Number(aging.days1to30 || 0))}/><Kpi label="31–60 days" value={cash(Number(aging.days31to60 || 0))}/><Kpi label="60+ days" value={cash(Number(aging.over60 || 0))}/></div>}
                 <div className="retail-dates">
                   <label>
                     From
