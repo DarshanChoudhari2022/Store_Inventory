@@ -14,6 +14,12 @@ try {
  const b=await call('create_shop',[owner.token,'Verification B','Test only','b-'+suffix,password]);
  const sessionA=await call('login_user',['a-'+suffix,password]);
  const sessionB=await call('login_user',['b-'+suffix,password]);
+ assert.deepEqual(await call('retail_feature_flags',[owner.token,a.id]),{});
+ assert.deepEqual(await call('retail_feature_flag_set',[owner.token,a.id,'bulk_import',false]),{bulk_import:false});
+ await client.query('savepoint feature_flags');
+ await assert.rejects(call('retail_feature_flag_set',[sessionA.token,a.id,'bulk_import',true]),/Super admin/);
+ await client.query('rollback to savepoint feature_flags');
+ assert.deepEqual(await call('retail_feature_flag_set',[owner.token,a.id,'bulk_import',true]),{bulk_import:true});
  const staffRows=await call('manage_shop_staff',[owner.token,a.id,'create',JSON.stringify({name:'Verification operator',username:'staff-'+suffix,password})]);
  const staffLogin=await call('login_user',['staff-'+suffix,password]);assert.equal(staffLogin.shopId,a.id);
  await call('manage_shop_staff',[owner.token,a.id,'pause',JSON.stringify({id:staffRows[0].id})]);
@@ -69,6 +75,7 @@ try {
  console.log('Product and contact pagination/search passed.');
  console.log('Daily report totals, scoped history and credit-limit rejection also passed.');
  console.log('Held-bill checkout, split tender, retry identity and cash allocation passed.');
+ console.log('Super-admin feature controls passed.');
  const cron=await client.query("select active from cron.job where jobname='storestock-recurring-bills'");
  assert.equal(cron.rows[0]?.active,true);console.log('Recurring scheduler is registered and active.');
 } catch(e) {await client.query('rollback').catch(()=>{});console.error(e.message);process.exitCode=1;}

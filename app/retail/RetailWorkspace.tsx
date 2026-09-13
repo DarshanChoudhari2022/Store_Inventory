@@ -88,6 +88,7 @@ export default function RetailWorkspace({
   sessionId,
   lang,
   staffRole,
+  accountRole,
   rpc,
   onChanged,
   fallback,
@@ -96,11 +97,13 @@ export default function RetailWorkspace({
   sessionId: string;
   lang: "en" | "mr";
   staffRole?: "cashier" | "manager";
+  accountRole?: "owner" | "shop";
   rpc: Rpc;
   onChanged: () => Promise<void>;
   fallback?: ReactNode;
 }) {
   const t = (a: string, b: string) => (lang === "mr" ? b : a);
+  const isOwner = accountRole === "owner";
   const namespace = `${sessionId}:${shopId}`;
   const [scan, setScan] = useState(false),
     [labelProduct, setLabelProduct] = useState<Product | null>(null);
@@ -220,6 +223,7 @@ export default function RetailWorkspace({
       p_offset:historyOffset,
       p_catalog_offset:catalogOffset, p_query:catalogQuery, p_low:catalogLow,
     })) as Workspace;
+      w.flags = (await rpcRef.current("retail_feature_flags", {p_shop_id:shopId})) as NonNullable<Workspace["flags"]>;
       if(staffRole!=='cashier' && ['cash','reports'].includes(view))w.summary=await rpcRef.current("retail_report",{p_shop_id:shopId,p_from:from,p_to:to}) as NonNullable<Workspace["summary"]>;
     } catch (error) {
       if (isNetworkFailure(error)) return restoreWorkspace();
@@ -403,6 +407,12 @@ export default function RetailWorkspace({
     const timer = window.setInterval(online, 30000);
     return () => { window.removeEventListener('online', online); window.clearInterval(timer); };
   }, [shopReady, namespace]);
+  const flagEnabled = (flag: keyof NonNullable<Workspace["flags"]>, fallbackValue = true) => data?.flags?.[flag] ?? fallbackValue;
+  const gstEnabled = flagEnabled('gst');
+  const bulkImportEnabled = flagEnabled('bulk_import');
+  const recurringEnabled = flagEnabled('recurring_billing');
+  const ocrJobsEnabled = flagEnabled('ocr_jobs');
+  const accountingEnabled = flagEnabled('accounting', false);
   const allNav: [View, string, string, typeof Package][] = [
     ["sell", "Sell", "विक्री", ShoppingCart],
     ["products", "Products", "उत्पादने", Package],
@@ -416,10 +426,14 @@ export default function RetailWorkspace({
     ["recurring", "Recurring bills", "नियमित बिले", Repeat],
     ["settings", "Shop settings", "दुकान सेटिंग्ज", Settings],
   ];
-  const nav = staffRole === "cashier" ? allNav.filter(([v]) => ["sell","bills","customers"].includes(v)) : allNav;
+  const nav = (staffRole === "cashier" ? allNav.filter(([v]) => ["sell","bills","customers"].includes(v)) : allNav).filter(([v]) => v !== 'recurring' || recurringEnabled);
   // A cashier may arrive with a manager's saved draft; return them to a permitted screen.
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { if (staffRole === "cashier" && !["sell","bills","customers"].includes(view)) setView("sell"); }, [staffRole, view]);
+  useEffect(() => {
+    if ((staffRole === "cashier" && !["sell","bills","customers"].includes(view)) || (view === "recurring" && data?.flags?.recurring_billing === false)) {
+      const timer = window.setTimeout(() => setView("sell"), 0);
+      return () => window.clearTimeout(timer);
+    }
+  }, [staffRole, view, data?.flags?.recurring_billing]);
   const purchasing = view === "purchases",
     currentCart = purchasing ? purchaseCart : cart,
     setCurrentCart = purchasing ? setPurchaseCart : setCart;
@@ -548,6 +562,7 @@ export default function RetailWorkspace({
   }, [selectedContact, view, offline, rpc, shopId]);
   async function importProducts(file: File) {
     try {
+      if (!bulkImportEnabled) throw new Error("Bulk import is disabled for this shop.");
       if (file.size > 2_000_000) throw new Error("CSV must be under 2 MB");
       const rows = parseCsv(await file.text());
       const expected = [
@@ -602,6 +617,10 @@ export default function RetailWorkspace({
   const [importRows, setImportRows] = useState<Record<string, string>[]>([]),
     [importDone, setImportDone] = useState(0);
   const importNow = async () => {
+    if (!bulkImportEnabled) {
+      setError("Bulk import is disabled for this shop.");
+      return;
+    }
     for (let i = importDone; i < importRows.length; i++) {
       const r = await perform("product", importRows[i]);
       if (!r) return;
@@ -610,6 +629,25 @@ export default function RetailWorkspace({
     setDialog(null);
     setImportRows([]);
     setImportDone(0);
+  };
+  const setFeatureFlag = async (flag: keyof NonNullable<Workspace["flags"]>, enabled: boolean) => {
+    if (lock.current) return;
+    lock.current = true;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const flags = await rpcRef.current("retail_feature_flag_set", {p_shop_id:shopId,p_flag:flag,p_enabled:enabled}) as NonNullable<Workspace["flags"]>;
+      setData(current => current ? {...current, flags} : current);
+      setNotice("Release control updated for this shop.");
+      if (flag === "recurring_billing" && !enabled && view === "recurring") setView("sell");
+      if (flag === "ocr_jobs" && !enabled) setPurchaseScan(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not update release control");
+    } finally {
+      lock.current = false;
+      setBusy(false);
+    }
   };
   if (!data && error.includes("PGRST202") && fallback)
     return <><p className="retail-warning" role="status">The retail upgrade is awaiting database setup. Your existing inventory workspace is available below.</p>{fallback}</>;
@@ -726,12 +764,16 @@ export default function RetailWorkspace({
         )}
         {purchasing && (
           <div className="retail-toolbar">
-            <button
-              onClick={() => setPurchaseScan(true)}
-              disabled={purchaseCart.length > 0 || offline}
-            >
-              Scan supplier bill images
-            </button>
+            {ocrJobsEnabled ? (
+              <button
+                onClick={() => setPurchaseScan(true)}
+                disabled={purchaseCart.length > 0 || offline}
+              >
+                Scan supplier bill images
+              </button>
+            ) : (
+              <span className="retail-help">Supplier OCR is disabled for this shop by release controls.</span>
+            )}
             {purchaseCart.length > 0 && (
               <small>
                 Finish the current purchase before scanning another bill.
@@ -1018,7 +1060,7 @@ export default function RetailWorkspace({
                     <div>{[50,100,200,500].map(amount => <button type="button" key={amount} onClick={() => setPaid(String(amount))}>{cash(amount)}</button>)}</div>
                     <strong>{t('Change to return', 'परत द्यायचे सुट्टे')}: {cash(Math.max(0, Number(paid || total) - total))}</strong>
                   </div>}
-                  {!purchasing && data.shop.settings.gstin && (
+                  {!purchasing && gstEnabled && data.shop.settings.gstin && (
                     <>
                       <label className="retail-check">
                         <VoiceInput
@@ -1120,43 +1162,49 @@ export default function RetailWorkspace({
                 <Plus size={17} />
                 {t("Add product", "उत्पादन जोडा")}
               </button>
-              <button
-                onClick={() =>
-                  downloadCsv("products-template.csv", [
-                    [
-                      "name",
-                      "category",
-                      "cost",
-                      "price",
-                      "stock",
-                      "reorder",
-                      "barcode",
-                      "unit",
-                      "hsn",
-                      "tax",
-                      "expiry",
-                      "style", "size", "colour", "mrp",
-                    ],
-                    ["Tea", "Grocery", 10, 15, 20, 5, "", "pcs", "", 0, "", "", "", "", ""],
-                    ["Oxford shirt", "Shirts", 400, 600, 5, 1, "OX01-M-NAVY", "pcs", "", 0, "", "OX-01", "M", "Navy", 799],
-                  ])
-                }
-              >
-                CSV template
-              </button>
-              <label className="retail-upload">
-                Import CSV
-                <VoiceInput
-                  type="file"
-                  accept=".csv,text/csv"
-                  onChange={(e) => {
-                    setImportDone(0);
-                    const file = e.target.files?.[0];
-                    if (file) void importProducts(file);
-                    e.target.value = "";
-                  }}
-                />
-              </label>
+              {bulkImportEnabled ? (
+                <>
+                  <button
+                    onClick={() =>
+                      downloadCsv("products-template.csv", [
+                        [
+                          "name",
+                          "category",
+                          "cost",
+                          "price",
+                          "stock",
+                          "reorder",
+                          "barcode",
+                          "unit",
+                          "hsn",
+                          "tax",
+                          "expiry",
+                          "style", "size", "colour", "mrp",
+                        ],
+                        ["Tea", "Grocery", 10, 15, 20, 5, "", "pcs", "", 0, "", "", "", "", ""],
+                        ["Oxford shirt", "Shirts", 400, 600, 5, 1, "OX01-M-NAVY", "pcs", "", 0, "", "OX-01", "M", "Navy", 799],
+                      ])
+                    }
+                  >
+                    CSV template
+                  </button>
+                  <label className="retail-upload">
+                    Import CSV
+                    <VoiceInput
+                      type="file"
+                      accept=".csv,text/csv"
+                      onChange={(e) => {
+                        setImportDone(0);
+                        const file = e.target.files?.[0];
+                        if (file) void importProducts(file);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                </>
+              ) : (
+                <span className="retail-help">Bulk import is disabled for this shop by release controls.</span>
+              )}
             </div>
             <Table
               headers={[
@@ -1436,7 +1484,7 @@ export default function RetailWorkspace({
           </>
         )}
         {view === "reports" && data && <ReportsPanel data={data} summary={summary!} from={from} to={to} offline={offline} rpc={rpc} />}
-        {view === "recurring" && (
+        {view === "recurring" && recurringEnabled && (
           <>
             <DeliveryPlanner data={data} disabled={busy||offline} rpc={rpc} onSaved={reload}/>
             <div className="retail-toolbar">
@@ -1502,6 +1550,21 @@ export default function RetailWorkspace({
         {view === "quotes" && <Quotes data={data} cart={cart} disabled={busy||offline} rpc={rpc} onInvoice={setReceipt} onCreated={()=>{setCart([]);setHeld(null);}} onChanged={async()=>{await reload();await onChanged();}}/>}
         {view === "settings" && (
           <><Appearance lang={lang} />
+          {isOwner && (
+            <section className="retail-settings">
+              <h3>{t("Release controls", "रिलीज नियंत्रण")}</h3>
+              <p>
+                Enable advanced features per shop after the owner has checked the workflow on that shop&apos;s devices.
+              </p>
+              <div className="retail-flag-grid">
+                <FeatureFlagToggle label="GST billing controls" description="Shows GST supply controls during billing and keeps tax details visible on receipts." enabled={gstEnabled} busy={busy} onChange={(enabled)=>void setFeatureFlag('gst',enabled)} />
+                <FeatureFlagToggle label="Bulk product import" description="Allows CSV product uploads for initial catalogue setup and clothing variants." enabled={bulkImportEnabled} busy={busy} onChange={(enabled)=>void setFeatureFlag('bulk_import',enabled)} />
+                <FeatureFlagToggle label="Supplier bill OCR" description="Allows image review for purchase entry before stock is updated." enabled={ocrJobsEnabled} busy={busy} onChange={(enabled)=>void setFeatureFlag('ocr_jobs',enabled)} />
+                <FeatureFlagToggle label="Recurring billing" description="Allows scheduled templates, skips, delivery planning and automatic credit bills." enabled={recurringEnabled} busy={busy} onChange={(enabled)=>void setFeatureFlag('recurring_billing',enabled)} />
+                <FeatureFlagToggle label="Accounting reports" description="Reserved for balance sheet, trial balance, cash flow and statutory export rollout." enabled={accountingEnabled} busy={busy} onChange={(enabled)=>void setFeatureFlag('accounting',enabled)} />
+              </div>
+            </section>
+          )}
           <form
             className="retail-settings"
             onSubmit={async (e) => {
@@ -1595,7 +1658,7 @@ export default function RetailWorkspace({
           onClose={() => setLabelProduct(null)}
         />
       )}
-      {purchaseScan && (
+      {purchaseScan && ocrJobsEnabled && (
         <PurchaseScan
           products={data.products}
           onClose={() => setPurchaseScan(false)}
@@ -2011,6 +2074,17 @@ function Method() {
         <option value="upi">UPI</option>
         <option value="card">Card</option>
       </select>
+    </label>
+  );
+}
+function FeatureFlagToggle({label,description,enabled,busy,onChange}:{label:string;description:string;enabled:boolean;busy:boolean;onChange:(enabled:boolean)=>void}) {
+  return (
+    <label className="retail-flag-card">
+      <span>
+        <strong>{label}</strong>
+        <small>{description}</small>
+      </span>
+      <input type="checkbox" checked={enabled} disabled={busy} onChange={(event)=>onChange(event.target.checked)} />
     </label>
   );
 }

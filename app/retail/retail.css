@@ -16,6 +16,11 @@
 .retail-cash-chips > div { display:flex; flex-wrap:wrap; gap:6px; }
 .retail-cash-chips > div button { padding:7px 10px; min-height:38px; }
 .retail-settings + .retail-settings { margin-top:22px; }
+.retail-flag-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-top:14px; }
+.retail-flag-card { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:14px; border:1px solid #d5e1da; background:#fff; border-radius:8px; padding:14px; }
+.retail-flag-card strong { display:block; color:#20352d; }
+.retail-flag-card small { display:block; margin-top:4px; color:#607268; line-height:1.45; }
+.retail-flag-card input { width:22px; height:22px; min-height:22px; padding:0; accent-color:var(--retail-accent,#205b42); }
 .retail, .retail button, .retail label, .retail select, .retail input, .retail-dialog label, .retail-dialog input { font-size: var(--retail-font,16px); }
 .retail-pagination { display:flex; align-items:center; justify-content:flex-end; gap:12px; margin:12px 0 20px; color:#526156; font-size:13px; }
 .retail-pagination button { border:1px solid #cddbd1; border-radius:7px; padding:7px 11px; background:#fff; cursor:pointer; }
@@ -31,6 +36,9 @@
 [data-retail-theme="dark"] .retail :is(small,p,th,.retail-product-category) { color:#bacbd3; }
 [data-retail-theme="dark"] .retail th { background:#263c48; }
 [data-retail-theme="dark"] .retail .primary,[data-retail-theme="dark"] .retail-dialog .primary { background:var(--retail-accent,#205b42); color:white; }
+[data-retail-theme="dark"] .retail-flag-card { background:#1b2c36; border-color:#3e5360; }
+[data-retail-theme="dark"] .retail-flag-card strong { color:#e1e9ec; }
+[data-retail-theme="dark"] .retail-flag-card small { color:#bacbd3; }
 [data-retail-theme="dark"] .retail-nav > button[aria-current] { background:#304852; }
 [data-retail-theme="dark"] .retail .retail-warning { background:#403620; color:#ffe4a4; }
 [data-retail-theme="dark"] .retail .retail-notice { background:#203e32; color:#d0f5de; }
@@ -748,6 +756,9 @@
     font-size: 22px;
   }
   .retail-form-grid {
+    grid-template-columns: 1fr;
+  }
+  .retail-flag-grid {
     grid-template-columns: 1fr;
   }
   .retail-dialog {

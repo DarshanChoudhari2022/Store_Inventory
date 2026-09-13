@@ -84,6 +84,7 @@ export type Purchase = {
   created_at: string;
 };
 export type Workspace = {
+  flags?: Partial<Record<'accounting'|'gst'|'bulk_import'|'recurring_billing'|'ocr_jobs', boolean>>;
   catalogOffset?:number;
   catalogQuery?:string;
   catalogLow?:boolean;

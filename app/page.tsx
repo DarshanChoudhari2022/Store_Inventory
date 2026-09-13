@@ -878,6 +878,7 @@ export default function Home() {
             shopId={dashboard.shop.id}
             lang={lang}
             staffRole={session.staffRole}
+            accountRole={session.role}
             rpc={async (name, args) => {
               const { data, error, status } = await getSupabaseClient().rpc(name, { ...args, p_token: session.cacheId });
               if (error) throw Object.assign(new Error(`${error.code}: ${error.message}`), {code:error.code,status});

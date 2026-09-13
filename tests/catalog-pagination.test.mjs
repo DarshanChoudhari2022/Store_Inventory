@@ -48,6 +48,11 @@ test('catalogue pages search across all records and preserve sales selectors and
   const exportPage=await call('retail_report_export_page',owner.token,shop.id,'2026-09-01','2026-09-30',0,50);
   assert.equal(exportPage.invoices.length,0);assert.equal(exportPage.hasMore,false);
   assert.equal((await call('retail_workspace_scoped',owner.token,shop.id,'2026-09-01','2026-09-30','products',0)).products.length,50);
+  assert.deepEqual(await call('retail_feature_flags',owner.token,shop.id),{});
+  assert.deepEqual(await call('retail_feature_flag_set',owner.token,shop.id,'bulk_import',false),{bulk_import:false});
+  assert.deepEqual(await call('retail_feature_flag_set',owner.token,shop.id,'bulk_import',true),{bulk_import:true});
+  await assert.rejects(call('retail_feature_flag_set',cashier.token,shop.id,'ocr_jobs',false),/Super admin/);
+  await assert.rejects(call('retail_feature_flag_set',owner.token,shop.id,'unknown',true),/Unknown feature/);
   // The deployment runner replays migrations; ensure overload replacement stays safe.
   for(const file of migrationFiles)await db.exec(await readFile(new URL('../supabase/'+file,import.meta.url),'utf8'));
   assert.equal((await page('products')).pageTotals.products,61);

@@ -2,7 +2,7 @@ import {NextResponse,type NextRequest} from 'next/server';
 import {cacheId,cookieName,cookieOptions,database,jsonBody,sameOrigin,sessionToken} from '../session/security';
 
 export const runtime='nodejs';
-const allowed=new Set(['list_shops','owner_summary','get_shop_dashboard','create_shop','reset_shop_password','admin_update_shop','retail_workspace','retail_workspace_scoped','retail_report','retail_report_export_page','retail_contact_aging','retail_product_lookup','retail_feature_flags','retail_workspace_page','retail_action','retail_contact_update','retail_split_checkout','retail_hold','retail_counter_checkout','retail_schedule','delete_item_confirmed','manage_shop_staff','retail_delivery_settings','retail_delivery_list','retail_quote_action','retail_quote_list','add_item','edit_item','set_stock_checked','update_stock','record_sale','record_sale_v2']);
+const allowed=new Set(['list_shops','owner_summary','get_shop_dashboard','create_shop','reset_shop_password','admin_update_shop','retail_workspace','retail_workspace_scoped','retail_report','retail_report_export_page','retail_contact_aging','retail_product_lookup','retail_feature_flags','retail_feature_flag_set','retail_workspace_page','retail_action','retail_contact_update','retail_split_checkout','retail_hold','retail_counter_checkout','retail_schedule','delete_item_confirmed','manage_shop_staff','retail_delivery_settings','retail_delivery_list','retail_quote_action','retail_quote_list','add_item','edit_item','set_stock_checked','update_stock','record_sale','record_sale_v2']);
 const reply=(body:unknown,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}});
 export async function POST(request:NextRequest){
  const started=performance.now(); let operation='unknown';
