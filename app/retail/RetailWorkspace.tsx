@@ -29,6 +29,7 @@ import {
   X,
 } from "lucide-react";
 import dynamic from 'next/dynamic';
+const ReportsPanel = dynamic(() => import('./ReportsPanel'), { ssr: false, loading: () => <p role="status">Loading reports…</p> });
 import {
   cash,
   productName,
@@ -1413,9 +1414,10 @@ export default function RetailWorkspace({
             />
           </>
         )}
-        {view === "reports" && (
+        {view === "reports" && data && <ReportsPanel data={data} summary={summary!} from={from} to={to} offline={offline} />}
+        {false && data && view === "reports" && (
           <>
-            <p role="status">{data.summary ? `Database totals as of ${new Date(data.summary.asOf).toLocaleString()}` : "Offline totals from this device"}{offline ? " · Cached; reconnect to refresh" : ""}</p>
+            <p role="status">{data!.summary ? `Database totals as of ${new Date(data!.summary!.asOf).toLocaleString()}` : "Offline totals from this device"}{offline ? " · Cached; reconnect to refresh" : ""}</p>
             <div className="retail-kpis">
               {[
                 ["Sales incl. tax", summary!.sales],
@@ -1437,7 +1439,7 @@ export default function RetailWorkspace({
               <button
                 onClick={() =>
                   downloadCsv(`report-${from}-${to}.csv`, [
-                    ["Shop", data.shop.name],
+                    ["Shop", data!.shop.name],
                     ["From", from],
                     ["To", to],
                     ...Object.entries(summary!).map(([k, v]) => [k, v]),
@@ -1452,7 +1454,7 @@ export default function RetailWorkspace({
                       "Paid",
                       "Method",
                     ],
-                    ...data.invoices.map((i) => [
+                    ...data!.invoices.map((i) => [
                       i.number,
                       i.created_at,
                       i.subtotal,
@@ -1464,7 +1466,7 @@ export default function RetailWorkspace({
                     ]),
                     [],
                     ["Returns", "Date", "Total", "Tax", "Refund"],
-                    ...data.returns.map((r) => [
+                    ...data!.returns.map((r) => [
                       r.number,
                       r.created_at,
                       r.total,
@@ -1491,7 +1493,7 @@ export default function RetailWorkspace({
                       "IGST",
                       "Total",
                     ],
-                    ...data.invoices.map((i) => [
+                    ...data!.invoices.map((i) => [
                       i.number,
                       i.created_at,
                       i.customer.gstin || "",
@@ -1519,7 +1521,7 @@ export default function RetailWorkspace({
               rows={["cash", "upi", "card", "credit"].map((m) => [
                 m,
                 cash(
-                  data.invoices
+                  data!.invoices
                     .reduce((n, i) => n + (i.method===m ? Number(i.paid) : i.method==='split' ? Number(i.tenders?.[m as 'cash'|'upi'|'card']||0) : 0), 0),
                 ),
               ])}
