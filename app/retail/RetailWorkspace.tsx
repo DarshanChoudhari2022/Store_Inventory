@@ -23,7 +23,6 @@ import {
   Plus,
   Trash2,
   Barcode,
-  Download,
   Store,
   Menu,
   X,
@@ -1425,119 +1424,6 @@ export default function RetailWorkspace({
           </>
         )}
         {view === "reports" && data && <ReportsPanel data={data} summary={summary!} from={from} to={to} offline={offline} rpc={rpc} />}
-        {false && data && view === "reports" && (
-          <>
-            <p role="status">{data!.summary ? `Database totals as of ${new Date(data!.summary!.asOf).toLocaleString()}` : "Offline totals from this device"}{offline ? " · Cached; reconnect to refresh" : ""}</p>
-            <div className="retail-kpis">
-              {[
-                ["Sales incl. tax", summary!.sales],
-                ["Tax collected", summary!.tax],
-                ["Gross profit", summary!.gross],
-                ["Expenses", summary!.expenses],
-                ["Net after recorded expenses", summary!.net],
-                ["Customer dues (all time)", summary!.receivable],
-                ["Supplier dues (all time)", summary!.payable],
-              ].map(([label, value]) => (
-                <Kpi
-                  key={label}
-                  label={String(label)}
-                  value={cash(Number(value))}
-                />
-              ))}
-            </div>
-            <div className="retail-toolbar">
-              <button
-                onClick={() =>
-                  downloadCsv(`report-${from}-${to}.csv`, [
-                    ["Shop", data!.shop.name],
-                    ["From", from],
-                    ["To", to],
-                    ...Object.entries(summary!).map(([k, v]) => [k, v]),
-                    [],
-                    [
-                      "Bill",
-                      "Date",
-                      "Net",
-                      "Tax",
-                      "Total",
-                      "Cost",
-                      "Paid",
-                      "Method",
-                    ],
-                    ...data!.invoices.map((i) => [
-                      i.number,
-                      i.created_at,
-                      i.subtotal,
-                      i.tax,
-                      i.total,
-                      i.cost,
-                      i.paid,
-                      i.method,
-                    ]),
-                    [],
-                    ["Returns", "Date", "Total", "Tax", "Refund"],
-                    ...data!.returns.map((r) => [
-                      r.number,
-                      r.created_at,
-                      r.total,
-                      r.tax,
-                      r.refund,
-                    ]),
-                  ])
-                }
-              >
-                <Download size={17} />
-                Export report CSV
-              </button>
-              <button
-                onClick={() =>
-                  downloadCsv(`gst-sales-${from}-${to}.csv`, [
-                    [
-                      "Bill",
-                      "Date",
-                      "Customer GSTIN",
-                      "Place of supply",
-                      "Taxable value",
-                      "CGST",
-                      "SGST/UTGST",
-                      "IGST",
-                      "Total",
-                    ],
-                    ...data!.invoices.map((i) => [
-                      i.number,
-                      i.created_at,
-                      i.customer.gstin || "",
-                      i.supply_state,
-                      i.subtotal,
-                      i.interstate ? 0 : Math.floor(i.tax * 50) / 100,
-                      i.interstate ? 0 : i.tax - Math.floor(i.tax * 50) / 100,
-                      i.interstate ? i.tax : 0,
-                      i.total,
-                    ]),
-                  ])
-                }
-              >
-                Export tax sales register
-              </button>
-            </div>
-            <p className="retail-help">
-              Reports reflect recorded transactions and full-bill returns.
-              Legacy single-item sales have no payment method or GST breakdown.
-              The tax sales register is an accounting export, not a filed GST
-              return; returns are listed separately in the report export.
-            </p>
-            <Table
-              headers={["Method", "Initial collections"]}
-              rows={["cash", "upi", "card", "credit"].map((m) => [
-                m,
-                cash(
-                  data!.invoices
-                    .reduce((n, i) => n + (i.method===m ? Number(i.paid) : i.method==='split' ? Number(i.tenders?.[m as 'cash'|'upi'|'card']||0) : 0), 0),
-                ),
-              ])}
-            />
-          </>
-        )}
         {view === "recurring" && (
           <>
             <DeliveryPlanner data={data} disabled={busy||offline} rpc={rpc} onSaved={reload}/>
