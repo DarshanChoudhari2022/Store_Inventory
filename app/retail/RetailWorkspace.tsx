@@ -1414,7 +1414,7 @@ export default function RetailWorkspace({
             />
           </>
         )}
-        {view === "reports" && data && <ReportsPanel data={data} summary={summary!} from={from} to={to} offline={offline} />}
+        {view === "reports" && data && <ReportsPanel data={data} summary={summary!} from={from} to={to} offline={offline} rpc={rpc} />}
         {false && data && view === "reports" && (
           <>
             <p role="status">{data!.summary ? `Database totals as of ${new Date(data!.summary!.asOf).toLocaleString()}` : "Offline totals from this device"}{offline ? " · Cached; reconnect to refresh" : ""}</p>
