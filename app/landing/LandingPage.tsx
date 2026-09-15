@@ -702,6 +702,12 @@ export default function LandingPage({
             "किरकोळ व्यवसायासाठी स्पष्ट आणि सोपे काम.",
           )}
         </span>
+        <span className="lp-powered">
+          Powered by{" "}
+          <a href="https://www.bracketdex.com/" target="_blank" rel="noreferrer">
+            BracketDex
+          </a>
+        </span>
         <AnimatedLink href="#">{t("Back to top", "वर जा")} ↑</AnimatedLink>
       </footer>
     </main>

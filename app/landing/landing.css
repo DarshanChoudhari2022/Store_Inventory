@@ -979,6 +979,29 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+.lp-powered a,
+.login-legal a,
+.login-powered a {
+  color: #246b4b;
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.login-legal,
+.login-powered {
+  color: #657266;
+  font-size: 0.78rem;
+  line-height: 1.6;
+  text-align: center;
+}
+.login-legal {
+  margin-top: 14px;
+}
+.login-powered {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #e3ebe4;
+}
 .lp-skip {
   position: fixed;
   top: -100px;
@@ -1376,6 +1399,10 @@
   }
   .lp-footer > span:nth-child(2) {
     order: 3;
+    width: 100%;
+  }
+  .lp-powered {
+    order: 4;
     width: 100%;
   }
   .lp[lang="mr"] h1 {
