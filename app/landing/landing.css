@@ -980,12 +980,17 @@
   text-underline-offset: 3px;
 }
 .lp-powered a,
+.lp-legal-links a,
 .login-legal a,
 .login-powered a {
   color: #246b4b;
   font-weight: 650;
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+.lp-legal-links {
+  display: inline-flex;
+  gap: 12px;
 }
 .login-legal,
 .login-powered {
@@ -1403,6 +1408,10 @@
   }
   .lp-powered {
     order: 4;
+    width: 100%;
+  }
+  .lp-legal-links {
+    order: 5;
     width: 100%;
   }
   .lp[lang="mr"] h1 {

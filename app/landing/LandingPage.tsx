@@ -708,6 +708,10 @@ export default function LandingPage({
             BracketDex
           </a>
         </span>
+        <span className="lp-legal-links">
+          <a href="/terms-of-service">Terms</a>
+          <a href="/privacy-policy">Privacy</a>
+        </span>
         <AnimatedLink href="#">{t("Back to top", "वर जा")} ↑</AnimatedLink>
       </footer>
     </main>
