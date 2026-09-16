@@ -1480,7 +1480,7 @@ export default function RetailWorkspace({
                 )}
                 <button
                   type="button"
-                  className="dash-btn dash-btn-primary"
+                  className="dash-btn dash-btn-primary primary"
                   onClick={() => setDialog({ type: "product" })}
                 >
                   <Plus size={16} />
