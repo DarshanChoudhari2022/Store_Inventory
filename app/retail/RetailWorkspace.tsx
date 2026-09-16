@@ -228,15 +228,17 @@ export default function RetailWorkspace({
     }
     if (!navigator.onLine) return restoreWorkspace();
     let w: Workspace;
-    try { w = (await rpcRef.current("retail_workspace_scoped", {
-      p_shop_id: shopId,
-      p_from: from,
-      p_to: to,
-      p_view:view,
-      p_offset:historyOffset,
-      p_catalog_offset:catalogOffset, p_query:catalogQuery, p_low:catalogLow,
-    })) as Workspace;
-      w.flags = (await rpcRef.current("retail_feature_flags", {p_shop_id:shopId})) as NonNullable<Workspace["flags"]>;
+    try {
+      w = await (rpcRef.current("retail_workspace_scoped", {
+        p_shop_id: shopId,
+        p_from: from,
+        p_to: to,
+        p_view: view,
+        p_offset: historyOffset,
+        p_catalog_offset: catalogOffset,
+        p_query: catalogQuery,
+        p_low: catalogLow,
+      }) as Promise<Workspace>);
       if(staffRole!=='cashier' && ['cash','reports'].includes(view))w.summary=await rpcRef.current("retail_report",{p_shop_id:shopId,p_from:from,p_to:to}) as NonNullable<Workspace["summary"]>;
     } catch (error) {
       if (isNetworkFailure(error)) return restoreWorkspace();

@@ -185,6 +185,16 @@ const dictionary = {
     copy: 'Copy',
     copied: 'Copied',
     generatedCredential: 'Generated credential',
+    changePassword: 'Change Password',
+    currentPassword: 'Current password',
+    newPassword: 'New password (min 12 chars)',
+    confirmPassword: 'Confirm new password',
+    updatePassword: 'Update password',
+    passwordUpdated: 'Password changed successfully! Signing out to sign in again…',
+    passwordMismatch: 'New passwords do not match.',
+    passwordMinLength: 'Password must be at least 12 characters.',
+    changeAdminPassword: 'Change Super Admin Password',
+    cancel: 'Cancel',
   },
   mr: {
     appName: 'स्टोअर इन्व्हेंटरी व्यवस्थापन',
@@ -294,6 +304,16 @@ const dictionary = {
     copy: 'कॉपी',
     copied: 'कॉपी झाले',
     generatedCredential: 'जनरेटेड क्रेडेन्शियल',
+    changePassword: 'पासवर्ड बदला',
+    currentPassword: 'सध्याचा पासवर्ड',
+    newPassword: 'नवीन पासवर्ड (किमान १२ अक्षरे)',
+    confirmPassword: 'नवीन पासवर्ड पुष्टी करा',
+    updatePassword: 'पासवर्ड अपडेट करा',
+    passwordUpdated: 'पासवर्ड यशस्वीपणे बदलला! पुन्हा लॉगिन करण्यासाठी बाहेर पडत आहे…',
+    passwordMismatch: 'नवीन पासवर्ड जुळत नाहीत.',
+    passwordMinLength: 'पासवर्ड किमान १२ अक्षरांचा असावा.',
+    changeAdminPassword: 'सुपर अॅडमिन पासवर्ड बदला',
+    cancel: 'रद्द करा',
   },
 } satisfies Record<Lang, Record<string, string>>;
 
@@ -373,6 +393,13 @@ export default function Home() {
   const [message, setMessage] = useState('Ready for today');
   const [credentialNote, setCredentialNote] = useState<CredentialNote | null>(null);
   const [isBusy, setIsBusy] = useState(false);
+  const [restored, setRestored] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [pwCurrent, setPwCurrent] = useState('');
+  const [pwNext, setPwNext] = useState('');
+  const [pwConfirm, setPwConfirm] = useState('');
+  const [pwStatus, setPwStatus] = useState<{ error?: string; success?: string }>({});
+  const [pwBusy, setPwBusy] = useState(false);
   const [lang, setLang] = useState<Lang>('en');
   function changeLanguage(value: Lang) { setLang(value); window.localStorage.setItem('store-language', value); }
   useEffect(() => { document.documentElement.lang = lang; }, [lang]);
@@ -383,24 +410,51 @@ export default function Home() {
     window.localStorage.removeItem('store-inventory-session-v1');
     setLang(window.localStorage.getItem('store-language') === 'mr' ? 'mr' : 'en');
     const saved = window.localStorage.getItem(sessionKey);
-    if (!saved) return;
+    if (!saved) {
+      setRestored(true);
+      return;
+    }
 
     try {
       const parsed = JSON.parse(saved) as Session;
-      if (!parsed.cacheId || !['owner', 'shop'].includes(parsed.role) || (parsed.role === 'shop' && !parsed.shopId)) throw new Error('Invalid saved session');
-      if(navigator.onLine){
-        const response=await fetch('/api/session',{cache:'no-store'}).catch(()=>null);
-        if(response && response.status<500){
-          if(!response.ok)throw new Error('Session expired');
-          const profile=await response.json() as Session;
-          if(profile.cacheId!==parsed.cacheId)throw new Error('Session changed');
-          parsed.role=profile.role;parsed.staffRole=profile.staffRole;parsed.shopId=profile.shopId;
-        }
+      if (!parsed.cacheId || !['owner', 'shop'].includes(parsed.role) || (parsed.role === 'shop' && !parsed.shopId)) {
+        throw new Error('Invalid saved session');
       }
+      // Set session immediately so dashboard renders with zero delay (no home page flash)
       setSession(parsed);
-      await loadAfterLogin(parsed);
+      setRestored(true);
+      void loadAfterLogin(parsed);
+
+      // Verify session in background without blocking UI render
+      if (navigator.onLine) {
+        fetch('/api/session', { cache: 'no-store' })
+          .then(async (response) => {
+            if (response && response.status < 500) {
+              if (!response.ok) {
+                window.localStorage.removeItem(sessionKey);
+                setSession(null);
+                setDashboard(null);
+                return;
+              }
+              const profile = await response.json() as Session;
+              if (profile.cacheId !== parsed.cacheId) {
+                window.localStorage.removeItem(sessionKey);
+                setSession(null);
+                setDashboard(null);
+                return;
+              }
+              if (profile.role !== parsed.role || profile.staffRole !== parsed.staffRole || profile.shopId !== parsed.shopId) {
+                const updated: Session = { ...parsed, role: profile.role, staffRole: profile.staffRole, shopId: profile.shopId };
+                setSession(updated);
+                window.localStorage.setItem(sessionKey, JSON.stringify(updated));
+              }
+            }
+          })
+          .catch(() => {});
+      }
     } catch {
       window.localStorage.removeItem(sessionKey);
+      setRestored(true);
     }
   });
   // Restore external browser storage once after hydration; the server cannot read it.
@@ -483,37 +537,51 @@ export default function Home() {
 
   async function loadShop(token: string, shopId: string) {
     const request = ++shopRequest.current;
-    const restoreShop = async () => {
-      const cached=await readLocal<{data:ShopDashboardData;at:number}>(token+':base:'+shopId);
-      if(!cached||Date.now()-cached.at>12*60*60*1000)throw new Error('Connect once to load this shop.');
-      if(request===shopRequest.current){setDashboard(cached.data);setSelectedShopId(shopId);}return;
+    // Fast path 1: If cached data exists in IndexedDB, mount the dashboard immediately (0ms wait)
+    const cached = await readLocal<{data:ShopDashboardData;at:number}>(token+':base:'+shopId).catch(() => null);
+    if (cached && request === shopRequest.current && Date.now() - cached.at < 24 * 60 * 60 * 1000) {
+      setDashboard(cached.data);
+      setSelectedShopId(shopId);
+    } else if (request === shopRequest.current && !dashboard) {
+      // Fast path 2: Immediately set placeholder shop profile so RetailWorkspace mounts and loads in parallel
+      setDashboard({
+        shop: { id: shopId, name: '', area: '', username: '' },
+        items: [],
+        todaysSales: [],
+      });
+      setSelectedShopId(shopId);
     }
-    if (!navigator.onLine) return restoreShop();
-    const { data, error, status } = await getSupabaseClient().rpc('get_shop_dashboard', {
-      p_token: token,
-      p_shop_id: shopId,
-    });
-    if (request !== shopRequest.current) return;
-    if (isNetworkFailure({...error,status})) return restoreShop();
-    const raw = getRpcData<Record<string, unknown>>(data, error);
-    const shop = raw.shop as Record<string, unknown>;
-    const items = (raw.items as Record<string, unknown>[]).map(mapItem);
-    const todaysSales = (raw.todaysSales as Record<string, unknown>[]).map(mapSale);
 
-    setDashboard({
-      shop: {
-        id: String(shop.id),
-        name: String(shop.name),
-        area: String(shop.area),
-        username: String(shop.username),
-      },
-      items,
-      todaysSales,
-    });
-    setSelectedShopId(String(shop.id));
-    void writeLocal(token+':base:'+shopId,{data:{shop:{id:String(shop.id),name:String(shop.name),area:String(shop.area),username:String(shop.username)},items,todaysSales},at:Date.now()}).catch(()=>{});
-    setShops(current => current.map(account => account.id === String(shop.id) ? { ...account, itemCount: items.length } : account));
+    if (!navigator.onLine) return;
 
+    try {
+      const { data, error, status } = await getSupabaseClient().rpc('get_shop_dashboard', {
+        p_token: token,
+        p_shop_id: shopId,
+      });
+      if (request !== shopRequest.current) return;
+      if (isNetworkFailure({...error,status})) return;
+      const raw = getRpcData<Record<string, unknown>>(data, error);
+      const shop = raw.shop as Record<string, unknown>;
+      const items = (raw.items as Record<string, unknown>[]).map(mapItem);
+      const todaysSales = (raw.todaysSales as Record<string, unknown>[]).map(mapSale);
+
+      setDashboard({
+        shop: {
+          id: String(shop.id),
+          name: String(shop.name),
+          area: String(shop.area),
+          username: String(shop.username),
+        },
+        items,
+        todaysSales,
+      });
+      setSelectedShopId(String(shop.id));
+      void writeLocal(token+':base:'+shopId,{data:{shop:{id:String(shop.id),name:String(shop.name),area:String(shop.area),username:String(shop.username)},items,todaysSales},at:Date.now()}).catch(()=>{});
+      setShops(current => current.map(account => account.id === String(shop.id) ? { ...account, itemCount: items.length } : account));
+    } catch (e) {
+      if (!cached) throw e;
+    }
   }
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
@@ -611,6 +679,39 @@ export default function Home() {
     }
   }
 
+  async function handlePasswordReset(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!session) return;
+    setPwStatus({});
+    if (pwNext !== pwConfirm) {
+      setPwStatus({ error: copy.passwordMismatch });
+      return;
+    }
+    if (pwNext.length < 12) {
+      setPwStatus({ error: copy.passwordMinLength });
+      return;
+    }
+    setPwBusy(true);
+    try {
+      const rpcName = session.role === 'owner' ? 'reset_owner_password' : 'reset_own_shop_password';
+      const { error } = await getSupabaseClient().rpc(rpcName, {
+        p_token: session.cacheId,
+        p_current_password: pwCurrent,
+        p_new_password: pwNext,
+      });
+      if (error) throw new Error(error.message || 'Could not reset password');
+      setPwStatus({ success: copy.passwordUpdated });
+      setPwCurrent(''); setPwNext(''); setPwConfirm('');
+      setTimeout(() => {
+        void handleLogout();
+      }, 1500);
+    } catch (err) {
+      setPwStatus({ error: err instanceof Error ? err.message : 'Could not reset password' });
+    } finally {
+      setPwBusy(false);
+    }
+  }
+
   async function resetShopPassword(shopId: string) {
     if (!session) return;
 
@@ -651,6 +752,16 @@ export default function Home() {
   }
 
   if (!session) {
+    if (!restored) {
+      return (
+        <main className="dashboard-shell min-h-screen flex items-center justify-center bg-[#f8f7f2]">
+          <div className="text-center p-8">
+            <p className="text-xs font-semibold uppercase tracking-wider text-[#66735c]">{copy.appName}</p>
+            <p className="mt-3 text-base font-medium text-[#1e201d]">{copy.opening}</p>
+          </div>
+        </main>
+      );
+    }
     return (
 <LandingPage lang={lang} languageToggle={<LanguageToggle lang={lang} setLang={changeLanguage} />}><form onSubmit={handleLogin} className="auth-card">
                 <div className="auth-card-title">
@@ -707,6 +818,82 @@ export default function Home() {
   return (
     <main className="dashboard-shell min-h-screen">
       <AppearanceBootstrap />
+      {showPasswordModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
+          <div className="w-full max-w-md rounded-lg border border-[#cfc8b8] bg-white p-6 shadow-xl">
+            <h2 className="text-xl font-semibold text-[#1e201d]">
+              {session.role === 'owner' ? copy.changeAdminPassword : copy.changePassword}
+            </h2>
+            <p className="mt-1 text-xs text-[#62655f]">
+              {copy.credentialsHint}
+            </p>
+            <form onSubmit={handlePasswordReset} className="mt-4 grid gap-3">
+              <label className="block text-sm font-medium">
+                {copy.currentPassword}
+                <input
+                  type="password"
+                  required
+                  value={pwCurrent}
+                  onChange={e => setPwCurrent(e.target.value)}
+                  className="mt-1 w-full border border-[#cfc8b8] px-3 py-2 text-sm outline-none focus:border-[#2d6a4f]"
+                  autoComplete="current-password"
+                />
+              </label>
+              <label className="block text-sm font-medium">
+                {copy.newPassword}
+                <input
+                  type="password"
+                  required
+                  minLength={12}
+                  value={pwNext}
+                  onChange={e => setPwNext(e.target.value)}
+                  className="mt-1 w-full border border-[#cfc8b8] px-3 py-2 text-sm outline-none focus:border-[#2d6a4f]"
+                  autoComplete="new-password"
+                />
+              </label>
+              <label className="block text-sm font-medium">
+                {copy.confirmPassword}
+                <input
+                  type="password"
+                  required
+                  minLength={12}
+                  value={pwConfirm}
+                  onChange={e => setPwConfirm(e.target.value)}
+                  className="mt-1 w-full border border-[#cfc8b8] px-3 py-2 text-sm outline-none focus:border-[#2d6a4f]"
+                  autoComplete="new-password"
+                />
+              </label>
+              {pwStatus.error && (
+                <p className="rounded border border-[#f0c7a5] bg-[#fff1df] p-2 text-xs font-medium text-[#8a3f20]" role="alert">
+                  {pwStatus.error}
+                </p>
+              )}
+              {pwStatus.success && (
+                <p className="rounded border border-[#bbf7d0] bg-[#f0fdf4] p-2 text-xs font-medium text-[#166534]" role="status">
+                  {pwStatus.success}
+                </p>
+              )}
+              <div className="mt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  disabled={pwBusy}
+                  onClick={() => setShowPasswordModal(false)}
+                  className="border border-[#cfc8b8] px-4 py-2 text-sm font-medium hover:bg-[#f8f7f2]"
+                >
+                  {copy.cancel}
+                </button>
+                <button
+                  type="submit"
+                  disabled={pwBusy}
+                  className="bg-[#2d6a4f] px-4 py-2 text-sm font-semibold text-white hover:bg-[#24563f] disabled:opacity-50"
+                >
+                  {pwBusy ? copy.syncing : copy.updatePassword}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       <header className="dashboard-header border-b border-[#ddd7c7] bg-white">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-5 py-4">
           <div>
@@ -720,6 +907,13 @@ export default function Home() {
             <span className="border border-[#d8d3c5] bg-[#f8f7f2] px-3 py-2">
               {isBusy ? copy.syncing : message === 'Ready for today' ? copy.readyForToday : message}
             </span>
+            <button
+              type="button"
+              onClick={() => { setShowPasswordModal(true); setPwStatus({}); }}
+              className="border border-[#2d6a4f] px-3 py-2 text-[#2d6a4f]"
+            >
+              {copy.changePassword}
+            </button>
             <button type="button" onClick={handleLogout} className="border border-[#20221f] px-3 py-2">
               {copy.logout}
             </button>

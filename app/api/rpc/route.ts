@@ -2,7 +2,7 @@ import {NextResponse,type NextRequest} from 'next/server';
 import {cacheId,cookieName,cookieOptions,database,jsonBody,sameOrigin,sessionToken} from '../session/security';
 
 export const runtime='nodejs';
-const allowed=new Set(['list_shops','owner_summary','get_shop_dashboard','create_shop','reset_shop_password','admin_update_shop','retail_workspace','retail_workspace_scoped','retail_report','retail_report_export_page','retail_accounting_export','retail_contact_aging','retail_product_lookup','retail_feature_flags','retail_feature_flag_set','retail_workspace_page','retail_action','retail_contact_update','retail_split_checkout','retail_hold','retail_counter_checkout','retail_schedule','delete_item_confirmed','manage_shop_staff','retail_delivery_settings','retail_delivery_list','retail_quote_action','retail_quote_list','add_item','edit_item','set_stock_checked','update_stock','record_sale','record_sale_v2']);
+const allowed=new Set(['list_shops','owner_summary','get_shop_dashboard','create_shop','reset_shop_password','reset_own_shop_password','reset_owner_password','admin_update_shop','retail_workspace','retail_workspace_scoped','retail_report','retail_report_export_page','retail_accounting_export','retail_contact_aging','retail_product_lookup','retail_feature_flags','retail_feature_flag_set','retail_workspace_page','retail_action','retail_contact_update','retail_split_checkout','retail_hold','retail_counter_checkout','retail_schedule','delete_item_confirmed','manage_shop_staff','retail_delivery_settings','retail_delivery_list','retail_quote_action','retail_quote_list','add_item','edit_item','set_stock_checked','update_stock','record_sale','record_sale_v2']);
 const reply=(body:unknown,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}});
 export async function POST(request:NextRequest){
  const started=performance.now(); let operation='unknown';
@@ -17,12 +17,14 @@ export async function POST(request:NextRequest){
  if(body.cacheId!==cacheId(token))return reply({error:{code:'SESSION',message:'Account changed in another tab. Sign in again.'}},401);
  try{
   const client=database();
-  const profile=await client.rpc('retail_session_profile',{p_token:token});
-  if(profile.error)return reply({error:{message:'Service temporarily unavailable'}},503);
-  if(!profile.data)return reply({error:{code:'SESSION',message:'Session expired. Sign in again.'}},401);
   const args=body.args as Record<string,unknown>;
   if(args.p_shop_id!==undefined && (typeof args.p_shop_id!=='string'||!/^[0-9a-f-]{36}$/i.test(args.p_shop_id)))return reply({error:{code:'VALIDATION',message:'Invalid shop'}},400);
-  const limit=await client.rpc('retail_request_limit',{p_token:token,p_shop_id:args.p_shop_id??null});
+  const [profile,limit]=await Promise.all([
+   client.rpc('retail_session_profile',{p_token:token}),
+   client.rpc('retail_request_limit',{p_token:token,p_shop_id:args.p_shop_id??null}),
+  ]);
+  if(profile.error)return reply({error:{message:'Service temporarily unavailable'}},503);
+  if(!profile.data)return reply({error:{code:'SESSION',message:'Session expired. Sign in again.'}},401);
   if(limit.error)return reply({error:{code:limit.error.code,message:'Could not authorize request'}},400);
   if(!limit.data?.allowed)return NextResponse.json({error:{code:'RATE_LIMIT',message:'This shop is busy. Wait a moment and retry.'}},{status:429,headers:{'Retry-After':String(limit.data?.retryAfter??60),'Cache-Control':'no-store'}});
   const {data,error,status}=await client.rpc(body.name,{...body.args,p_token:token});
