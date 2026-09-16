@@ -29,4 +29,7 @@ export const migrationFiles = [
   'migrations/20261006_feature_flag_controls.sql',
   'migrations/20261007_accounting_exports.sql',
   'migrations/20261008_bounded_sell_catalog.sql',
+  'migrations/20261009_password_reset.sql',
+  'migrations/20261010_superfast_loading.sql',
+  'migrations/20261011_product_dashboard_sales.sql',
 ];

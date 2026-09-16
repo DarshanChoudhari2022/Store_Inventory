@@ -91,6 +91,7 @@ export type Workspace = {
   pageOffset?:number;
   pageView?:string;
   pageTotals?:Record<string,number>;
+  productSales?:Record<string, { qty: number; revenue: number }>;
   summary?: ReturnType<typeof report> & {asOf:string};
   shop: {
     id: string;

@@ -622,17 +622,29 @@ export default function RetailWorkspace({
     let totalItemsSold = 0;
     let totalSalesRevenue = 0;
 
-    (data?.invoices || []).forEach((inv) => {
-      (inv.lines || []).forEach((line) => {
-        if (!salesMap[line.id]) salesMap[line.id] = { qty: 0, revenue: 0 };
-        const q = line.qty || 1;
-        const rev = line.total || (line.price * q);
-        salesMap[line.id].qty += q;
-        salesMap[line.id].revenue += rev;
+    if (data?.productSales && Object.keys(data.productSales).length > 0) {
+      Object.entries(data.productSales).forEach(([id, s]) => {
+        const q = Number(s?.qty || 0);
+        const rev = Number(s?.revenue || 0);
+        salesMap[id] = { qty: q, revenue: rev };
+        salesMap[id.toLowerCase()] = { qty: q, revenue: rev };
         totalItemsSold += q;
         totalSalesRevenue += rev;
       });
-    });
+    } else {
+      (data?.invoices || []).forEach((inv) => {
+        (inv.lines || []).forEach((line) => {
+          const key = line.id;
+          if (!salesMap[key]) salesMap[key] = { qty: 0, revenue: 0 };
+          const q = Number(line.qty || 1);
+          const rev = Number(line.total || (line.price * q));
+          salesMap[key].qty += q;
+          salesMap[key].revenue += rev;
+          totalItemsSold += q;
+          totalSalesRevenue += rev;
+        });
+      });
+    }
 
     let winningId = "";
     let maxSold = 0;
@@ -660,7 +672,7 @@ export default function RetailWorkspace({
       healthPercent,
       returnedCount,
     };
-  }, [data?.products, data?.invoices, data?.returnedIds]);
+  }, [data?.products, data?.invoices, data?.returnedIds, data?.productSales]);
   const toggleProductActive = async (p: Product) => {
     if (busy || offline) return;
     await perform("product", {
@@ -1523,7 +1535,7 @@ export default function RetailWorkspace({
                         const perfClass = isOut ? "critical" : isReorder ? "low" : isHealthy ? "excellent" : "good";
                         const perfLabel = isOut ? "Bad 🔴" : isReorder ? "Low 🟡" : isHealthy ? "Excellent 🟢" : "Good 🟢";
                         const ratingStr = isHealthy ? "4.8★" : isReorder ? "3.9★" : isOut ? "2.5★" : "4.5★";
-                        const pSales = productDashboardStats.salesMap[p.id] || { qty: 0, revenue: 0 };
+                        const pSales = productDashboardStats.salesMap[p.id] || productDashboardStats.salesMap[p.id?.toLowerCase?.() || ""] || { qty: 0, revenue: 0 };
                         const thumbCatClass = getCatColorClass(p.category);
                         const initial = (p.name || "P").charAt(0).toUpperCase();
 
