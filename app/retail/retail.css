@@ -853,10 +853,38 @@
 }
 .voice-input { display: grid; grid-template-columns: minmax(0, 1fr) 44px; align-items: start; gap: 6px; min-width: 0; width: 100%; }
 .voice-input > input, .voice-input > textarea { width: 100%; min-width: 0; }
-.voice-input > .voice-button { display: inline-flex; align-items: center; justify-content: center; width: 44px; min-height: 44px; padding: 6px; border: 1px solid #cfc8b8; border-radius: 8px; background: #f7faf5; color: #2d6a4f; cursor: pointer; }
-.voice-status { grid-column: 1 / -1; font-size: 12px; line-height: 1.4; font-weight: 400; color: #526156; }
+.voice-status {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 500;
+  color: #526156;
+}
 .voice-status:empty { display: none; }
-.voice-button:disabled { cursor: not-allowed; opacity: .4; }
+.voice-status.voice-status-error {
+  color: #9a3412;
+  background: #fff7ed;
+  border: 1px solid #ffedd5;
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-top: 4px;
+}
+.voice-status.voice-status-listening {
+  color: #15803d;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-top: 4px;
+}
+.voice-status.voice-status-success {
+  color: #047857;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-top: 4px;
+}
 .voice-button.listening { background: #d8f3dc; color: #b42318; animation: voice-pulse 1.1s ease-in-out infinite; }
 @keyframes voice-pulse { 50% { box-shadow: 0 0 0 4px rgba(180,35,24,.16); } }
 @media (prefers-reduced-motion: reduce) { .voice-button.listening { animation: none; } }
