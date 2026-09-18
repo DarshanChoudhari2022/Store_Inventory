@@ -15,15 +15,16 @@
     "typecheck": "next typegen && tsc --noEmit",
     "migrate:retail": "node scripts/migrate-retail.mjs",
     "verify:live": "node scripts/verify-live-retail.mjs",
-    "verify:migrations": "node scripts/verify-migration-drift.mjs"
-    ,"backup:db": "node scripts/backup-database.mjs"
-    ,"restore:db": "node scripts/restore-database.mjs"
+    "verify:migrations": "node scripts/verify-migration-drift.mjs",
+    "backup:db": "node scripts/backup-database.mjs",
+    "restore:db": "node scripts/restore-database.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",
     "@zxing/browser": "^0.2.1",
     "framer-motion": "^13.2.0",
     "jsbarcode": "^3.12.3",
+    "jspdf": "^4.2.1",
     "lucide-react": "^1.44.0",
     "next": "16.3.4",
     "qrcode": "^1.5.4",
