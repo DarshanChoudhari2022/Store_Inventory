@@ -16,6 +16,7 @@ export default function Receipt({
   const qr = useRef<HTMLCanvasElement>(null);
   const [printerStatus, setPrinterStatus] = useState("");
   const [sharing, setSharing] = useState(false);
+  const [whatsappPhone, setWhatsappPhone] = useState(invoice.customer?.phone || "");
   useEffect(() => {
     const element = ref.current;
     element?.showModal();
@@ -42,11 +43,15 @@ export default function Receipt({
   const share = async () => {
     setSharing(true);
     try {
-      const result = await shareInvoicePdf(invoice);
+      const result = await shareInvoicePdf(invoice, whatsappPhone);
       if (result.downloaded) {
-        setPrinterStatus("Bill PDF downloaded. Attach the downloaded PDF in WhatsApp.");
+        if (result.targetPhone) {
+          setPrinterStatus(`Opening WhatsApp for +${result.targetPhone}. Attach the downloaded PDF bill.`);
+        } else {
+          setPrinterStatus("Bill PDF downloaded. Attach the downloaded PDF in WhatsApp.");
+        }
       } else if (result.sharedViaNative) {
-        setPrinterStatus("Bill PDF shared.");
+        setPrinterStatus("Bill PDF shared successfully.");
       }
     } catch (e) {
       setPrinterStatus(e instanceof Error ? e.message : "Could not share PDF.");
@@ -61,6 +66,28 @@ export default function Receipt({
       onCancel={onClose}
       aria-labelledby="receipt-title"
     >
+      <div className="receipt-whatsapp-share-bar">
+        <div className="receipt-whatsapp-input-group">
+          <label htmlFor="receipt-wa-phone">
+            WhatsApp No:
+          </label>
+          <input
+            id="receipt-wa-phone"
+            type="tel"
+            placeholder="Enter customer WhatsApp number (e.g. 9876543210)"
+            value={whatsappPhone}
+            onChange={(e) => setWhatsappPhone(e.target.value)}
+          />
+        </div>
+        <button
+          type="button"
+          className="receipt-whatsapp-btn"
+          disabled={sharing}
+          onClick={share}
+        >
+          {sharing ? "Preparing PDF…" : "📲 Share PDF on WhatsApp"}
+        </button>
+      </div>
       <div className="receipt-actions">
         <button onClick={onClose}>Close</button>
         <button onClick={() => window.print()}>Print</button>
@@ -70,7 +97,6 @@ export default function Receipt({
           try { await printEscPosBluetooth(receiptText(invoice)); setPrinterStatus("Sent to thermal printer."); }
           catch (error) { setPrinterStatus(error instanceof Error ? error.message : "Could not print to Bluetooth printer."); }
         }}>Bluetooth thermal print</button>
-        <button disabled={sharing} onClick={share}>{sharing ? "Sharing PDF…" : "Share PDF on WhatsApp"}</button>
       </div>
       {printerStatus && <p className="retail-notice" role="status">{printerStatus}</p>}
       <article

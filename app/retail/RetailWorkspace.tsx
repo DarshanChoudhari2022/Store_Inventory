@@ -1155,26 +1155,41 @@ export default function RetailWorkspace({
                   })
                 )}
                 <div className="retail-checkout">
-                  <label>
-                    {purchasing
-                      ? t("Supplier", "पुरवठादार")
-                      : t("Customer", "ग्राहक")}
+                  <div className="retail-customer-picker">
+                    <div className="retail-field-header">
+                      <label htmlFor="checkout-customer-select">
+                        {purchasing
+                          ? t("Supplier", "पुरवठादार")
+                          : t("Customer", "ग्राहक")}
+                      </label>
+                      {!purchasing && (
+                        <button
+                          type="button"
+                          className="retail-quick-add-link"
+                          onClick={() => setDialog({ type: "customer" })}
+                          title={t("Add new customer without leaving sell screen", "नवीन ग्राहक जोडा")}
+                        >
+                          <Plus size={13} /> {t("New Customer", "नवीन ग्राहक")}
+                        </button>
+                      )}
+                    </div>
                     <select
+                      id="checkout-customer-select"
                       value={contactId}
                       onChange={(e) => setContactId(e.target.value)}
                     >
                       <option value="">
                         {purchasing
                           ? t("Choose supplier", "पुरवठादार निवडा")
-                          : t("Walk-in customer", "सामान्य ग्राहक")}
+                          : t("Walk-in customer (no account needed)", "सामान्य ग्राहक (खाते आवश्यक नाही)")}
                       </option>
                       {contacts.map((c) => (
                         <option key={c.id} value={c.id}>
-                          {c.name} · {cash(c.balance)}
+                          {c.name} {c.phone ? `(${c.phone})` : ""} · {cash(c.balance)}
                         </option>
                       ))}
                     </select>
-                  </label>
+                  </div>
                   {purchasing && (
                     <label>
                       {t("Supplier bill reference", "पुरवठादार बिल क्रमांक")}
@@ -2164,7 +2179,12 @@ export default function RetailWorkspace({
               return;
             }
             const r = await perform(action, payload);
-            if (r) setDialog(null);
+            if (r) {
+              setDialog(null);
+              if (dialog.type === "customer" && typeof r === "object" && r !== null && "id" in r) {
+                setContactId(String((r as { id: unknown }).id));
+              }
+            }
           }}
         >
           {dialog.type === "product" && (
@@ -2266,8 +2286,8 @@ export default function RetailWorkspace({
           )}
           {(dialog.type === "customer" || dialog.type === "supplier") && (
             <>
-              <Field name="name" label="Name" required />
-              <Field name="phone" label="Phone" />
+              <Field name="name" label={dialog.type === "customer" ? "Customer Name" : "Supplier Name"} required />
+              <Field name="phone" label={dialog.type === "customer" ? "WhatsApp / Mobile Number" : "Phone"} type="tel" />
               <Field name="address" label="Address" />
               <Field name="gstin" label="GSTIN (optional)" />
             </>

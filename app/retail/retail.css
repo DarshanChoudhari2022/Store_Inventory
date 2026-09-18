@@ -579,6 +579,95 @@
   justify-content: flex-end;
   margin-top: 20px;
 }
+.receipt-whatsapp-share-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.receipt-whatsapp-input-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 220px;
+}
+.receipt-whatsapp-input-group label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #166534;
+  white-space: nowrap;
+}
+.receipt-whatsapp-input-group input {
+  flex: 1;
+  padding: 7px 10px;
+  border: 1px solid #86efac;
+  border-radius: 6px;
+  font-size: 13px;
+  background: #fff;
+  color: #1e293b;
+}
+.receipt-whatsapp-input-group input:focus {
+  outline: none;
+  border-color: #16a34a;
+  box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.2);
+}
+.receipt-whatsapp-btn {
+  background: #16a34a !important;
+  color: #fff !important;
+  font-weight: 600 !important;
+  border: none !important;
+  padding: 8px 16px !important;
+  border-radius: 6px !important;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+}
+.receipt-whatsapp-btn:hover:not(:disabled) {
+  background: #15803d !important;
+}
+.receipt-whatsapp-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.retail-customer-picker {
+  margin-bottom: 12px;
+}
+.retail-field-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.retail-field-header label {
+  margin-bottom: 0 !important;
+}
+.retail-quick-add-link {
+  background: none;
+  border: none;
+  color: #16a34a;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+.retail-quick-add-link:hover {
+  background: #dcfce7;
+  color: #15803d;
+}
 .receipt-actions {
   display: flex;
   gap: 8px;

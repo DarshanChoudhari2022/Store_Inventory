@@ -331,7 +331,18 @@ export function downloadInvoicePdf(invoice: Invoice) {
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
-export async function shareInvoicePdf(invoice: Invoice): Promise<{ sharedViaNative: boolean; downloaded: boolean }> {
+export function formatWhatsAppPhone(phone: string): string {
+  const digits = String(phone || "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.length === 10) return `91${digits}`;
+  if (digits.length === 11 && digits.startsWith("0")) return `91${digits.slice(1)}`;
+  return digits;
+}
+
+export async function shareInvoicePdf(
+  invoice: Invoice,
+  targetPhone?: string
+): Promise<{ sharedViaNative: boolean; downloaded: boolean; targetPhone?: string }> {
   const file = generateInvoicePdfFile(invoice);
   const title = `Bill ${invoice.number} - ${invoice.shop_snapshot.name}`;
   const text = receiptText(invoice);
@@ -348,11 +359,11 @@ export async function shareInvoicePdf(invoice: Invoice): Promise<{ sharedViaNati
         text,
         files: [file],
       });
-      return { sharedViaNative: true, downloaded: false };
+      return { sharedViaNative: true, downloaded: false, targetPhone };
     } catch (err) {
       // User cancelled native share sheet
       if ((err as Error).name === "AbortError") {
-        return { sharedViaNative: false, downloaded: false };
+        return { sharedViaNative: false, downloaded: false, targetPhone };
       }
     }
   }
@@ -361,13 +372,15 @@ export async function shareInvoicePdf(invoice: Invoice): Promise<{ sharedViaNati
   // 1. Download the PDF file automatically
   downloadInvoicePdf(invoice);
 
-  // 2. Open WhatsApp with formatted bill message and note
-  const waText = `${text}\n\n[Bill PDF has been downloaded to your device. Please attach it here.]`;
-  window.open(
-    `https://wa.me/?text=${encodeURIComponent(waText)}`,
-    "_blank",
-    "noopener,noreferrer",
-  );
+  // 2. Open WhatsApp with formatted bill message and note directed to specific phone if available
+  const cleanPhone = formatWhatsAppPhone(targetPhone || invoice.customer?.phone || "");
+  const waText = `${text}\n\n[Bill PDF has been downloaded. Please attach it here.]`;
+  const waUrl = cleanPhone
+    ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waText)}`
+    : `https://wa.me/?text=${encodeURIComponent(waText)}`;
 
-  return { sharedViaNative: false, downloaded: true };
+  window.open(waUrl, "_blank", "noopener,noreferrer");
+
+  return { sharedViaNative: false, downloaded: true, targetPhone: cleanPhone };
 }
+
