@@ -32,4 +32,6 @@ export const migrationFiles = [
   'migrations/20261009_password_reset.sql',
   'migrations/20261010_superfast_loading.sql',
   'migrations/20261011_product_dashboard_sales.sql',
+  'migrations/20261012_product_sales_consistency.sql',
+  'migrations/20261013_owner_scale_fast_paths.sql',
 ];

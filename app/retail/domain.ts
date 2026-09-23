@@ -181,6 +181,7 @@ export const today = () =>
     month: "2-digit",
     day: "2-digit",
   }).format(new Date());
+export const monthStart = () => today().slice(0, 8) + "01";
 export const round = (n: number) =>
   Math.round((n + Number.EPSILON) * 100) / 100;
 export const lineTotal = (l: CartLine) =>

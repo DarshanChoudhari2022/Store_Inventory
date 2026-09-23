@@ -32,7 +32,6 @@ import {
   Sparkles,
   CheckCircle2,
   Star,
-  Eye,
   EyeOff,
   FileSpreadsheet,
 } from "lucide-react";
@@ -40,6 +39,7 @@ import dynamic from 'next/dynamic';
 const ReportsPanel = dynamic(() => import('./ReportsPanel'), { ssr: false, loading: () => <p role="status">Loading reports…</p> });
 import {
   cash,
+  monthStart,
   productName,
   today,
   lineTotal,
@@ -123,8 +123,9 @@ export default function RetailWorkspace({
     [draftReady, setDraftReady] = useState(false);
   const [data, setData] = useState<Workspace | null>(null),
     [view, setView] = useState<View>("sell"),
-    [from, setFrom] = useState(today()),
-    [to, setTo] = useState(today());
+    [from, setFrom] = useState(monthStart()),
+    [to, setTo] = useState(today()),
+    [datePreset, setDatePreset] = useState<"month" | "today" | "7d" | "custom">("month");
   const [query, setQuery] = useState(""),
     [lookupProducts, setLookupProducts] = useState<Product[]>([]),
     [productCache, setProductCache] = useState<Product[]>([]),
@@ -237,7 +238,7 @@ export default function RetailWorkspace({
     if (!navigator.onLine) return restoreWorkspace();
     let w: Workspace;
     try {
-      w = await (rpcRef.current("retail_workspace_scoped", {
+      const workspacePromise = rpcRef.current("retail_workspace_scoped", {
         p_shop_id: shopId,
         p_from: from,
         p_to: to,
@@ -246,8 +247,13 @@ export default function RetailWorkspace({
         p_catalog_offset: catalogOffset,
         p_query: catalogQuery,
         p_low: catalogLow,
-      }) as Promise<Workspace>);
-      if(staffRole!=='cashier' && ['cash','reports'].includes(view))w.summary=await rpcRef.current("retail_report",{p_shop_id:shopId,p_from:from,p_to:to}) as NonNullable<Workspace["summary"]>;
+      }) as Promise<Workspace>;
+      const summaryPromise = staffRole !== 'cashier' && ['cash','reports'].includes(view)
+        ? rpcRef.current("retail_report",{p_shop_id:shopId,p_from:from,p_to:to}) as Promise<NonNullable<Workspace["summary"]>>
+        : Promise.resolve(null);
+      const [workspaceResult, summaryResult] = await Promise.all([workspacePromise, summaryPromise]);
+      w = workspaceResult;
+      if (summaryResult) w.summary = summaryResult;
     } catch (error) {
       if (isNetworkFailure(error)) return restoreWorkspace();
       throw error;
@@ -520,6 +526,26 @@ export default function RetailWorkspace({
     return rows.slice((pages[key]||0)*pageSize, ((pages[key]||0)+1)*pageSize);
   };
   const pager = (key: string, totalRows: number) => <Pagination page={pages[key] || 0} pages={Math.max(1, Math.ceil((data?.pageTotals?.[key] ?? totalRows) / pageSize))} onChange={(next) => {setPages(current => ({...current, [key]: next})); if(key==='contacts')setSelectedContact('');}} />;
+  const setDateRange = (nextFrom: string, nextTo: string, preset: "month" | "today" | "7d" | "custom") => {
+    setFrom(nextFrom);
+    setTo(nextTo);
+    setDatePreset(preset);
+    setPages((current) => ({ ...current, invoices: 0, movements: 0 }));
+  };
+  const applyDatePreset = (preset: "month" | "today" | "7d" | "custom") => {
+    if (preset === "custom") {
+      setDatePreset("custom");
+      return;
+    }
+    const end = today();
+    if (preset === "today") setDateRange(end, end, preset);
+    else if (preset === "month") setDateRange(monthStart(), end, preset);
+    else {
+      const start = new Date(`${end}T00:00:00+05:30`);
+      start.setDate(start.getDate() - 6);
+      setDateRange(start.toISOString().slice(0, 10), end, preset);
+    }
+  };
   const availableStock = (product: Product) => Math.max(0, product.stock - (offline ? pending.filter(sale => !sale.rejection).reduce((qty, sale) => qty + ((sale.data.lines as CartLine[]) || []).filter(line => line.id === product.id).reduce((n,line) => n + line.qty, 0), 0) : 0));
   const add = (p: Product) =>
     setCurrentCart((prev) => {
@@ -587,6 +613,10 @@ export default function RetailWorkspace({
     setLow(false);
     setSelectedContact("");
     setError("");
+  };
+  const startSupplierPurchase = (supplierId: string) => {
+    basketDetails.current.purchases = { ...emptyTender(), contactId: supplierId, method: "cash" };
+    changeView("purchases");
   };
   const rows =
     (view==='products' ? data?.products : view==='sell' && query.trim() ? lookupProducts : data?.products.filter(
@@ -672,7 +702,21 @@ export default function RetailWorkspace({
       healthPercent,
       returnedCount,
     };
-  }, [data?.products, data?.invoices, data?.returnedIds, data?.productSales]);
+  }, [data]);
+  const supplierStats = useMemo(() => {
+    const suppliers = (data?.contacts || []).filter((c) => c.kind === "supplier");
+    const purchases = data?.purchases || [];
+    const purchaseTotal = purchases.reduce((sum, purchase) => sum + Number(purchase.total || 0), 0);
+    const purchasePaid = purchases.reduce((sum, purchase) => sum + Number(purchase.paid || 0), 0);
+    return {
+      count: suppliers.length,
+      totalDue: suppliers.reduce((sum, supplier) => sum + Number(supplier.balance || 0), 0),
+      dueSuppliers: suppliers.filter((supplier) => Number(supplier.balance || 0) > 0).length,
+      purchaseTotal,
+      purchasePaid,
+      purchaseUnpaid: Math.max(0, purchaseTotal - purchasePaid),
+    };
+  }, [data]);
   const toggleProductActive = async (p: Product) => {
     if (busy || offline) return;
     await perform("product", {
@@ -961,15 +1005,24 @@ export default function RetailWorkspace({
             {notice}
           </p>
         )}
-        {["bills", "purchases", "cash", "reports"].includes(view) && (
+        {["products", "bills", "purchases", "cash", "reports"].includes(view) && (
           <div className="retail-dates">
+            <label>
+              Range
+              <select value={datePreset} onChange={(e) => applyDatePreset(e.target.value as typeof datePreset)}>
+                <option value="month">This month</option>
+                <option value="today">Today</option>
+                <option value="7d">Last 7 days</option>
+                <option value="custom">Custom dates</option>
+              </select>
+            </label>
             <label>
               {t("From", "पासून")}
               <VoiceInput
                 type="date"
                 value={from}
                 max={to}
-                onChange={(e) => setFrom(e.target.value)}
+                onChange={(e) => setDateRange(e.target.value, to, "custom")}
               />
             </label>
             <label>
@@ -978,7 +1031,7 @@ export default function RetailWorkspace({
                 type="date"
                 value={to}
                 min={from}
-                onChange={(e) => setTo(e.target.value)}
+                onChange={(e) => setDateRange(from, e.target.value, "custom")}
               />
             </label>
             <span>IST</span>
@@ -1762,6 +1815,15 @@ export default function RetailWorkspace({
         )}
         {(view === "customers" || view === "suppliers") && (
           <>
+            {view === "suppliers" && (
+              <div className="retail-kpis" aria-label="Supplier summary">
+                <Kpi label="Suppliers" value={String(supplierStats.count)} />
+                <Kpi label="Payable" value={cash(supplierStats.totalDue)} />
+                <Kpi label="Due suppliers" value={String(supplierStats.dueSuppliers)} />
+                <Kpi label="Purchases in range" value={cash(supplierStats.purchaseTotal)} />
+                <Kpi label="Paid in range" value={cash(supplierStats.purchasePaid)} />
+              </div>
+            )}
             <div className="retail-toolbar">
               <VoiceInput
                 placeholder={t("Search name or phone", "नाव किंवा फोन शोधा")}
@@ -1806,6 +1868,11 @@ export default function RetailWorkspace({
                         ? "Receive payment"
                         : "Pay supplier"}
                     </button>
+                    {view === "suppliers" && staffRole !== "cashier" && (
+                      <button onClick={() => startSupplierPurchase(c.id)}>
+                        New purchase
+                      </button>
+                    )}
                     {staffRole!=="cashier" && <button onClick={()=>setDialog({type:"contact_edit",id:c.id})}>Edit / credit terms</button>}
                     <button onClick={() => { setAging(null); setSelectedContact(c.id); }}>
                       Statement
@@ -1824,6 +1891,19 @@ export default function RetailWorkspace({
                   Entries in the selected date range. Outstanding is the
                   all-time balance.
                 </p>
+                {view === "suppliers" && staffRole !== "cashier" && (
+                  <div className="retail-row-actions">
+                    <button onClick={() => startSupplierPurchase(selectedContact)}>
+                      Record supplier bill
+                    </button>
+                    <button
+                      disabled={(data.contacts.find((c) => c.id === selectedContact)?.balance || 0) <= 0}
+                      onClick={() => setDialog({ type: "settle", id: selectedContact })}
+                    >
+                      Pay outstanding
+                    </button>
+                  </div>
+                )}
                 {aging && <div className="retail-kpis" aria-label="Customer ageing"><Kpi label="Current" value={cash(Number(aging.current || 0))}/><Kpi label="1–30 days" value={cash(Number(aging.days1to30 || 0))}/><Kpi label="31–60 days" value={cash(Number(aging.days31to60 || 0))}/><Kpi label="60+ days" value={cash(Number(aging.over60 || 0))}/></div>}
                 <div className="retail-dates">
                   <label>
@@ -1831,7 +1911,7 @@ export default function RetailWorkspace({
                     <VoiceInput
                       type="date"
                       value={from}
-                      onChange={(e) => setFrom(e.target.value)}
+                      onChange={(e) => setDateRange(e.target.value, to, "custom")}
                     />
                   </label>
                   <label>
@@ -1839,7 +1919,7 @@ export default function RetailWorkspace({
                     <VoiceInput
                       type="date"
                       value={to}
-                      onChange={(e) => setTo(e.target.value)}
+                      onChange={(e) => setDateRange(from, e.target.value, "custom")}
                     />
                   </label>
                 </div>

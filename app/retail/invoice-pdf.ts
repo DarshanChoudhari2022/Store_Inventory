@@ -286,7 +286,7 @@ export function generateInvoicePdfDoc(invoice: Invoice): jsPDF {
   });
 
   // Left Note / Terms (aligned alongside summary)
-  let leftY = y;
+  const leftY = y;
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);
   doc.setTextColor(107, 114, 128);

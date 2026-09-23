@@ -31,7 +31,7 @@ function VoiceControl({ target, disabled, statusId }: { target: RefObject<HTMLIn
           if (val) setIsBrave(true);
         }).catch(() => {});
       } else if (Boolean(nav.brave)) {
-        setIsBrave(true);
+        window.setTimeout(() => setIsBrave(true), 0);
       }
     }
   }, []);
