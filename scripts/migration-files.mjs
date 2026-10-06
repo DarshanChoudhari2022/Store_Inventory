@@ -34,4 +34,5 @@ export const migrationFiles = [
   'migrations/20261011_product_dashboard_sales.sql',
   'migrations/20261012_product_sales_consistency.sql',
   'migrations/20261013_owner_scale_fast_paths.sql',
+  'migrations/20261014_shop_type_username.sql',
 ];

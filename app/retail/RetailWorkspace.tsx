@@ -643,6 +643,7 @@ export default function RetailWorkspace({
       );
   };
   const summary = data ? data.summary ?? report(data) : null;
+  const isClothingShop = data?.shop.settings.shopType === 'clothing';
   const productDashboardStats = useMemo(() => {
     const allProducts = data?.products || [];
     const activeProducts = allProducts.filter((p) => p.is_active !== false);
@@ -2282,15 +2283,17 @@ export default function RetailWorkspace({
                 required
               />
               {pager("movements", data.movements.length)}
-              <p className="retail-help">For clothing, add each size and colour as a separate product with its own barcode and stock. For example: Oxford shirt · SH-01 · M · Navy.</p>
+              <div className={isClothingShop ? 'rounded-xl border border-[#d5e1da] bg-[#f4faf6] p-3' : ''}>
+                <p className="retail-help">{isClothingShop ? 'Clothing shop: add one product variant for every size and color so barcode, stock and sales stay accurate. Example: Oxford shirt · SH-01 · M · Navy.' : 'Optional variant details. Clothing shops should add each size and color as a separate product with its own barcode and stock.'}</p>
+                <div className="retail-form-grid">
+                  <Field name="style" label={isClothingShop ? 'Style / design code' : 'Style / SKU (optional)'} value={dialog.product?.style_code}/>
+                  <Field name="size" label={isClothingShop ? 'Size' : 'Size (optional)'} value={dialog.product?.size}/>
+                  <Field name="colour" label={isClothingShop ? 'Color' : 'Color (optional)'} value={dialog.product?.colour}/>
+                  <Field name="mrp" label="MRP (optional)" value={dialog.product?.mrp ?? ''} type="number" min="0" step="0.01"/>
+                </div>
+              </div>
               <label className="retail-check"><input name="active" type="checkbox" defaultChecked={dialog.product?.is_active!==false}/>Available for sale</label>
               <p className="retail-help">Turn off to hide this product from billing without changing stock or previous receipts.</p>
-              <div className="retail-form-grid">
-                <Field name="style" label="Style / SKU (optional)" value={dialog.product?.style_code}/>
-                <Field name="size" label="Size (optional)" value={dialog.product?.size}/>
-                <Field name="colour" label="Colour (optional)" value={dialog.product?.colour}/>
-                <Field name="mrp" label="MRP (optional)" value={dialog.product?.mrp ?? ''} type="number" min="0" step="0.01"/>
-              </div>
               <div className="retail-form-grid">
                 <Field
                   name="cost"

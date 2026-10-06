@@ -14,13 +14,16 @@ test('catalogue pages search across all records and preserve sales selectors and
   await db.exec("insert into owner_accounts(username,password_hash) values('owner',crypt('owner-password',gen_salt('bf')))");
   const owner=await call('login_user','owner','owner-password');
   const shop=await call('create_shop',owner.token,'Shop','Pune','shop','shop-password');
+  await call('admin_update_shop',owner.token,shop.id,'Fashion Shop','Pune',true,'fashion-admin','clothing');
+  const renamed=await call('login_user','fashion-admin','shop-password');
+  assert.equal(renamed.shopId,shop.id);
   await call('create_shop',owner.token,'Other','Pune','other','other-password');
   const outsider=await call('login_user','other','other-password');
   await call('manage_shop_staff',owner.token,shop.id,'create',JSON.stringify({name:'Cashier',username:'cashier',password:'cashier-password',role:'cashier'}));
   const cashier=await call('login_user','cashier','cashier-password');
   const action=(name,data)=>call('retail_action',owner.token,shop.id,crypto.randomUUID(),name,JSON.stringify(data));
   for(let n=0;n<61;n++) {
-   await action('product',{name:'Product '+String(n).padStart(3,'0'),price:20,cost:10,stock:n,reorder:2,unit:'pcs',barcode:'code'+n,style:n===60?'Needle%':'',category:'General'});
+   await action('product',{name:'Product '+String(n).padStart(3,'0'),price:20,cost:10,stock:n,reorder:2,unit:'pcs',barcode:'code'+n,style:n===60?'Needle%':'',size:n===60?'M':'',colour:n===60?'Navy':'',category:'General'});
    await action('contact',{name:'Customer '+String(n).padStart(3,'0'),kind:'customer',phone:'900000'+n});
   }
   await action('contact',{name:'Supplier',kind:'supplier'});
@@ -31,6 +34,9 @@ test('catalogue pages search across all records and preserve sales selectors and
   assert.equal(new Set([...first.products,...second.products].map(p=>p.id)).size,61);
   assert.deepEqual((await page('products')).products.map(p=>p.id),first.products.map(p=>p.id));
   assert.equal((await page('products',0,' code60 ')).products[0].barcode,'code60');
+  const clothingProduct=(await page('products',0,'%')).products[0];
+  assert.equal(clothingProduct.size,'M');
+  assert.equal(clothingProduct.colour,'Navy');
   assert.equal((await page('products',0,'%')).products.length,1);
   assert.equal((await page('products',0,'',true)).products.length,3);
   assert.equal((await page('products',0,'missing')).pageTotals.products,0);
@@ -63,6 +69,8 @@ test('catalogue pages search across all records and preserve sales selectors and
   await action('return',{id:sale.id,reason:'Customer returned full bill',method:'cash'});
   const returnedPage=await call('retail_workspace_scoped',owner.token,shop.id,soldDay,soldDay,'products',0,0,'',false);
   assert.equal(returnedPage.productSales[soldProduct.id],undefined);
+  const workspaceAfterSettings=await action('settings',{gstin:'',address:'Pune',state:'Maharashtra 27'}).then(()=>page('settings'));
+  assert.equal(workspaceAfterSettings.shop.settings.shopType,'clothing');
   assert.deepEqual(await call('retail_feature_flags',owner.token,shop.id),{});
   assert.deepEqual(await call('retail_feature_flag_set',owner.token,shop.id,'bulk_import',false),{bulk_import:false});
   assert.deepEqual(await call('retail_feature_flag_set',owner.token,shop.id,'bulk_import',true),{bulk_import:true});
@@ -70,6 +78,7 @@ test('catalogue pages search across all records and preserve sales selectors and
   await db.query("insert into items(shop_id,name,category,buying_price,default_selling_price,stock,reorder_level) select id,'Scale item','General',1,2,5,1 from shops where username in ('scale-1','scale-2','scale-3')");
   const ownerShops=await call('list_shops',owner.token);
   assert.equal(ownerShops.length,122);
+  assert.equal(ownerShops.find(s=>s.username==='fashion-admin').shopType,'clothing');
   assert.equal(ownerShops.find(s=>s.username==='scale-1').itemCount,1);
   assert.equal(ownerShops.find(s=>s.username==='scale-4').itemCount,0);
   const ownerTotals=await call('owner_summary',owner.token);

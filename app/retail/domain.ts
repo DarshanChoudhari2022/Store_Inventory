@@ -46,6 +46,7 @@ export type InvoiceLine = CartLine & {
   cost: number;
 };
 export type Settings = {
+  shopType?: 'general' | 'clothing';
   gstin?: string;
   address?: string;
   state?: string;

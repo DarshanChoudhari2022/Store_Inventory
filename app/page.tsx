@@ -31,6 +31,8 @@ type Sale = {
   date: string;
 };
 
+type ShopType = 'general' | 'clothing';
+
 type ShopAccount = {
   id: string;
   name: string;
@@ -38,6 +40,7 @@ type ShopAccount = {
   username: string;
   itemCount: number;
   active: boolean;
+  shopType: ShopType;
 };
 
 type ShopProfile = {
@@ -503,6 +506,7 @@ export default function Home() {
       username: String(shop.username),
       itemCount: toNumber(shop.itemCount),
       active: shop.active !== false,
+      shopType: (shop.shopType === 'clothing' ? 'clothing' : 'general') as ShopType,
     }));
 
     setOwnerSummary({
@@ -652,6 +656,7 @@ export default function Home() {
     const slug = cleanSlug(name) || `shop-${Date.now()}`;
     const username = `${slug}-${Date.now().toString().slice(-4)}.admin`;
     const password = generatePassword();
+    const shopType: ShopType = form.get('shopType') === 'clothing' ? 'clothing' : 'general';
 
     try {
       setIsBusy(true);
@@ -664,6 +669,18 @@ export default function Home() {
       });
       const shop = getRpcData<Record<string, unknown>>(data, error);
       const shopId = String(shop.id);
+      if (shopType === 'clothing') {
+        const { error: typeError } = await getSupabaseClient().rpc('admin_update_shop', {
+          p_token: session.cacheId,
+          p_shop_id: shopId,
+          p_name: String(shop.name),
+          p_area: String(shop.area),
+          p_active: true,
+          p_username: String(shop.username),
+          p_shop_type: shopType,
+        });
+        if (typeError) throw new Error(typeError.message);
+      }
       setCredentialNote({
         label: String(shop.name),
         username: String(shop.username),
@@ -737,12 +754,12 @@ export default function Home() {
     }
   }
 
-  async function updateShop(shop: ShopAccount, name: string, area: string, active: boolean) {
+  async function updateShop(shop: ShopAccount, name: string, area: string, active: boolean, username: string, shopType: ShopType) {
     if (!session || isBusy) return;
     setIsBusy(true);
     try {
       const { error } = await getSupabaseClient().rpc('admin_update_shop', {
-        p_token: session.cacheId, p_shop_id: shop.id, p_name: name, p_area: area, p_active: active,
+        p_token: session.cacheId, p_shop_id: shop.id, p_name: name, p_area: area, p_active: active, p_username: username, p_shop_type: shopType,
       });
       if (error) throw new Error(error.message);
       setMessage(active ? `${name} updated and active` : `${name} paused. Shop sessions revoked.`);
@@ -955,7 +972,7 @@ export default function Home() {
                         <tr key={shop.id} className="border-t border-[#eee9dc]">
                           <td className="px-4 py-3 font-medium">{shop.name}<span className="ml-2 text-xs">{shop.active ? 'Active' : 'Paused'}</span></td>
                           <td className="px-4 py-3">{shop.area}</td>
-                          <td className="px-4 py-3 font-mono text-xs">{shop.username}</td>
+                          <td className="px-4 py-3"><span className="font-mono text-xs">{shop.username}</span><span className="ml-2 rounded-full bg-[#e8f3ee] px-2 py-1 text-xs text-[#216143]">{shop.shopType === 'clothing' ? 'Clothing' : 'General'}</span></td>
                           <td className="px-4 py-3">{shop.itemCount}</td>
                           <td className="px-4 py-3">
                             <div className="flex gap-2">
@@ -972,10 +989,13 @@ export default function Home() {
                                 <form className="grid gap-2 py-3" onSubmit={e => {
                                   e.preventDefault();
                                   const f = new FormData(e.currentTarget);
-                                  void updateShop(shop, String(f.get('name')), String(f.get('area')), f.get('active') === 'on');
+                                  const nextType = f.get('shopType') === 'clothing' ? 'clothing' : 'general';
+                                  void updateShop(shop, String(f.get('name')), String(f.get('area')), f.get('active') === 'on', String(f.get('username') || ''), nextType);
                                 }}>
                                   <label>Shop name<VoiceInput name="name" defaultValue={shop.name} required maxLength={120} className="block border p-2" /></label>
                                   <label>Area<VoiceInput name="area" defaultValue={shop.area} required maxLength={120} className="block border p-2" /></label>
+                                  <label>Login username<VoiceInput name="username" defaultValue={shop.username} required minLength={3} maxLength={80} pattern="[a-zA-Z0-9][a-zA-Z0-9._-]{2,79}" className="block border p-2" /></label>
+                                  <label>Shop type<select name="shopType" defaultValue={shop.shopType} className="block border p-2"><option value="general">General retail</option><option value="clothing">Clothing shop</option></select></label>
                                   <label><VoiceInput type="checkbox" name="active" defaultChecked={shop.active} /> Shop active</label>
                                   <button disabled={isBusy} className="border p-2">Save shop</button>
                                 </form>
@@ -1002,6 +1022,7 @@ export default function Home() {
                 <div className="mt-4 grid gap-3">
                   <Field label={copy.shopName} name="shopName" required />
                   <Field label={copy.area} name="area" defaultValue="Pune" required />
+                  <label className="form-field block text-sm font-medium">Shop type<select name="shopType" defaultValue="general" className="mt-2 w-full border border-[#cfc8b8] px-3 py-3 font-normal outline-none focus:border-[#2d6a4f]"><option value="general">General retail</option><option value="clothing">Clothing shop</option></select></label>
                 </div>
                 <button
                   disabled={isBusy}
